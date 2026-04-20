@@ -40,8 +40,15 @@ exports.handler = async (event) => {
 
     if (action === 'raw') {
       const ids = event.queryStringParameters?.ids || '';
-      const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=1');
+      const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&pageSize=1');
       return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || {}) };
+    }
+
+    if (action === 'rawsched') {
+      const ids = event.queryStringParameters?.ids || '';
+      const today = new Date().toISOString().slice(0, 10);
+      const data = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=1');
+      return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || data) };
     }
 
     if (action === 'delays') {
@@ -51,43 +58,60 @@ exports.handler = async (event) => {
 
       const stationIdList = ids.split(',').map(s => s.trim());
       const nameList      = names ? names.split('|') : stationIdList;
+      const today         = new Date().toISOString().slice(0, 10);
 
-      const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500');
-      const trains  = data.trains || [];
-      const stNames = data.stations || {};
+      const [opsData, schedData] = await Promise.all([
+        plkGet('/operations?stations=' + ids + '&withPlanned=true&pageSize=500'),
+        plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
+      ]);
+
+      const trains  = opsData.trains || [];
+      const scheds  = schedData.trains || [];
+      const stNames = opsData.stations || {};
+
+      const schedMap = {};
+      scheds.forEach(s => { schedMap[s.orderId] = s; });
 
       const result = {};
       stationIdList.forEach((stationId, idx) => {
         const stationName = nameList[idx] || stNames[stationId] || stationId;
         const delayed = [];
+
         trains.forEach(t => {
           if (t.trainStatus === 'C') return;
           const stops = t.stations || [];
           const stop  = stops.find(s => String(s.stationId) === String(stationId));
           if (!stop) return;
+
           const cancelled = t.trainStatus === 'X';
           const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
           if (!cancelled && delay <= 0) return;
+
+          const sched = schedMap[t.orderId] || {};
+
           delayed.push({
             cancelled,
             delay,
-            trainNumber: t.trainNumber || t.trainName || t.orderId || '—',
-            category:    t.commercialCategoryName || t.categoryName || t.category || '',
-            carrier:     t.carrierShortName || t.carrierName || t.carrier || '',
-            from:        t.startStationName || t.originStationName || t.fromStation || '',
-            to:          t.endStationName   || t.destinationStationName || t.toStation || '',
+            trainNumber: sched.trainNumber || sched.trainName || t.orderId || '—',
+            category:    sched.commercialCategoryName || sched.categoryName || sched.category || '',
+            carrier:     sched.carrierShortName || sched.carrierName || sched.carrier || '',
+            from:        sched.startStationName || sched.originStationName || '',
+            to:          sched.endStationName   || sched.destinationStationName || '',
             plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
             actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
           });
         });
+
         delayed.sort((a, b) => {
           if (a.cancelled !== b.cancelled) return a.cancelled ? -1 : 1;
           return b.delay - a.delay;
         });
+
         if (delayed.length > 0) {
           result[stationId] = { name: stationName, trains: delayed };
         }
       });
+
       return { statusCode: 200, headers, body: JSON.stringify(result) };
     }
 
