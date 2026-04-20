@@ -134,6 +134,18 @@
     } catch { return val; }
   }
 
+  function isStillRelevant(plannedTime, delay) {
+    if (!plannedTime) return true;
+    try {
+      const [h, m] = plannedTime.slice(0, 5).split(':').map(Number);
+      const plannedMin = h * 60 + m;
+      const actualMin  = plannedMin + (delay || 0);
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      return nowMin < actualMin + 10;
+    } catch { return true; }
+  }
+
   async function load() {
     const btn = document.getElementById('rbtn');
     btn.classList.add('loading');
@@ -153,10 +165,14 @@
       STATIONS.forEach(station => {
         const st = data[station.id];
         if (!st || !st.trains.length) return;
+
+        // Filtruj stare pociągi po stronie przeglądarki
+        const trains = st.trains.filter(t => t.cancelled || isStillRelevant(t.plannedTime, t.delay));
+        if (!trains.length) return;
         anyShown = true;
 
-        const cancelCount = st.trains.filter(t => t.cancelled).length;
-        const delayCount  = st.trains.filter(t => !t.cancelled).length;
+        const cancelCount = trains.filter(t => t.cancelled).length;
+        const delayCount  = trains.filter(t => !t.cancelled).length;
         const parts = [];
         if (cancelCount) parts.push(cancelCount + ' odwołanych');
         if (delayCount)  parts.push(delayCount  + ' opóźnionych');
@@ -169,7 +185,7 @@
             <div class="station-count">${parts.join(' · ')}</div>
           </div>`;
 
-        st.trains.forEach(t => {
+        trains.forEach(t => {
           const big  = !t.cancelled && t.delay >= 15;
           const plan = fmtTime(t.plannedTime);
           const act  = fmtTime(t.actualTime);
@@ -229,7 +245,7 @@
   }
 
   load();
-  setInterval(load, 90000);
+  setInterval(load, 45000);
 </script>
 </body>
 </html>
