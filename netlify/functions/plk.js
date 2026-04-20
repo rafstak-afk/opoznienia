@@ -38,17 +38,20 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify(data) };
     }
 
-    if (action === 'raw') {
-      const ids = event.queryStringParameters?.ids || '';
-      const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&pageSize=1');
-      return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || {}) };
-    }
-
     if (action === 'rawsched') {
       const ids = event.queryStringParameters?.ids || '';
       const today = new Date().toISOString().slice(0, 10);
       const data = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=1');
       return { statusCode: 200, headers, body: JSON.stringify(data.routes?.[0] || data) };
+    }
+
+    if (action === 'rawtrain') {
+      const ids = event.queryStringParameters?.ids || '';
+      const num = event.queryStringParameters?.num || '';
+      const today = new Date().toISOString().slice(0, 10);
+      const data = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500');
+      const found = (data.routes || []).find(r => r.nationalNumber === num);
+      return { statusCode: 200, headers, body: JSON.stringify({ train: found || null, dictionaries: data.dictionaries }) };
     }
 
     if (action === 'delays') {
@@ -68,6 +71,7 @@ exports.handler = async (event) => {
       const trains  = opsData.trains  || [];
       const routes  = schedData.routes || [];
       const stNames = opsData.stations || {};
+      const stationNames = schedData.dictionaries?.stations || {};
 
       const schedMap = {};
       routes.forEach(r => { schedMap[r.orderId] = r; });
@@ -88,9 +92,17 @@ exports.handler = async (event) => {
           if (!cancelled && delay <= 0) return;
 
           const r = schedMap[t.orderId] || {};
-          const routeStops = r.stations || r.stationList || [];
-          const lastStop   = routeStops[routeStops.length - 1];
-          const firstStop  = routeStops[0];
+          const routeStops = r.stations || [];
+          const firstStopId = routeStops[0]?.stationId;
+          const lastStopId  = routeStops[routeStops.length - 1]?.stationId;
+          const from = firstStopId ? (stationNames[firstStopId] || '') : '';
+          const to   = lastStopId  ? (stationNames[lastStopId]  || '') : '';
+
+          // Stacje pośrednie — wszystkie między pierwszą a ostatnią
+          const via = routeStops
+            .slice(1, -1)
+            .map(s => stationNames[s.stationId] || '')
+            .filter(Boolean);
 
           delayed.push({
             cancelled,
@@ -98,8 +110,9 @@ exports.handler = async (event) => {
             trainNumber: r.nationalNumber || t.orderId || '—',
             category:    r.commercialCategorySymbol || '',
             carrier:     r.carrierCode || '',
-            from:        firstStop?.stationName || '',
-            to:          lastStop?.stationName  || '',
+            from,
+            to,
+            via,
             plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
             actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
           });
