@@ -44,10 +44,10 @@
     }
     .station-name  { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; font-family: var(--mono); }
     .station-count { font-size: 11px; font-family: var(--mono); color: var(--text3); }
+
     .train-row {
       background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
       padding: 0.75rem 0.875rem; margin-bottom: 6px;
-      display: grid; grid-template-columns: 56px 1fr auto; gap: 0 12px; align-items: center;
     }
     .train-row.cancel { animation: pulse-cancel 2.5s ease-in-out infinite; }
     @keyframes pulse-cancel {
@@ -61,16 +61,33 @@
       50%  { background: rgba(255,200,0,0.18); border-color: rgba(200,150,0,0.40); }
       100% { background: rgba(255,200,0,0.06); border-color: rgba(200,150,0,0.15); }
     }
-    .delay { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--accent); text-align: right; }
+
+    .train-top {
+      display: grid; grid-template-columns: 56px 1fr auto; gap: 0 12px; align-items: start;
+    }
+    .delay { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--accent); text-align: right; padding-top: 1px; }
     .delay.big    { color: var(--red); }
-    .delay.cancel { color: var(--red); font-size: 11px; line-height: 1.3; font-weight: 500; }
+    .delay.cancel { color: var(--red); font-size: 11px; line-height: 1.3; }
+
     .train-info { min-width: 0; }
     .train-nm   { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .train-meta { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .train-carrier { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-top: 1px; }
+
     .train-time { text-align: right; flex-shrink: 0; }
     .t-plan   { font-family: var(--mono); font-size: 14px; font-weight: 500; }
     .t-act    { font-family: var(--mono); font-size: 11px; color: var(--red); margin-top: 1px; }
     .t-cancel { font-family: var(--mono); font-size: 11px; color: var(--red); }
+
+    .train-route {
+      margin-top: 6px; padding-top: 6px;
+      border-top: 0.5px solid var(--border);
+      font-size: 11px; color: var(--text2);
+      font-family: var(--mono);
+      line-height: 1.5;
+    }
+    .train-route .relation { color: var(--text); font-weight: 500; }
+    .train-route .via-stops { color: var(--text3); margin-top: 1px; }
+
     .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
     .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
     .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
@@ -153,23 +170,44 @@
           </div>`;
 
         st.trains.forEach(t => {
-          const big = !t.cancelled && t.delay >= 15;
+          const big  = !t.cancelled && t.delay >= 15;
           const plan = fmtTime(t.plannedTime);
           const act  = fmtTime(t.actualTime);
-          const row  = document.createElement('div');
+
+          // Nazwa pociągu: kategoria + numer + nazwa handlowa
+          const trainLabel = [t.catSymbol, t.trainNumber, t.trainName].filter(Boolean).join(' ');
+
+          // Relacja skąd → dokąd
+          const relation = t.from && t.to ? t.from + ' → ' + t.to
+                         : t.to            ? '→ ' + t.to
+                         : t.from          ? t.from + ' →' : '';
+
+          // Stacje pośrednie (max 5 żeby nie zaśmiecać)
+          const viaStr = t.via && t.via.length
+            ? t.via.slice(0, 5).join(', ') + (t.via.length > 5 ? '…' : '')
+            : '';
+
+          const row = document.createElement('div');
           row.className = 'train-row' + (t.cancelled ? ' cancel' : big ? ' big' : '');
           row.innerHTML = `
-            <div class="delay${t.cancelled ? ' cancel' : big ? ' big' : ''}">
-              ${t.cancelled ? 'ODWOŁANY' : '+' + t.delay + "'"}
+            <div class="train-top">
+              <div class="delay${t.cancelled ? ' cancel' : big ? ' big' : ''}">
+                ${t.cancelled ? 'ODWOŁANY' : '+' + t.delay + "'"}
+              </div>
+              <div class="train-info">
+                <div class="train-nm">${trainLabel || '—'}</div>
+                <div class="train-carrier">${t.carrierCode || ''}</div>
+              </div>
+              <div class="train-time">
+                <div class="t-plan${t.cancelled ? ' t-cancel' : ''}">${plan}</div>
+                ${!t.cancelled && act && act !== plan ? `<div class="t-act">${act}</div>` : ''}
+              </div>
             </div>
-            <div class="train-info">
-              <div class="train-nm">${t.category} ${t.trainNumber}</div>
-              <div class="train-meta">${t.carrier}${t.from ? ' · '+t.from : ''}${t.to ? ' → '+t.to : ''}</div>
-            </div>
-            <div class="train-time">
-              <div class="t-plan${t.cancelled ? ' t-cancel' : ''}">${plan}</div>
-              ${!t.cancelled && act && act !== plan ? `<div class="t-act">${act}</div>` : ''}
-            </div>`;
+            ${relation || viaStr ? `
+            <div class="train-route">
+              ${relation ? `<div class="relation">${relation}</div>` : ''}
+              ${viaStr   ? `<div class="via-stops">przez: ${viaStr}</div>` : ''}
+            </div>` : ''}`;
           block.appendChild(row);
         });
 
