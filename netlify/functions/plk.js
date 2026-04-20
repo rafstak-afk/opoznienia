@@ -48,7 +48,7 @@ exports.handler = async (event) => {
       // Pobierz bez fullRoutes — mniejszy payload, szybciej
       // withPlanned=true potrzebne do pól *DelayMinutes
       const data = await plkGet(
-        '/operations?stations=' + ids + '&withPlanned=true&pageSize=500'
+        '/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'
       );
 
       const trains  = data.trains || [];
