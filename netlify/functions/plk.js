@@ -48,7 +48,7 @@ exports.handler = async (event) => {
       const ids = event.queryStringParameters?.ids || '';
       const today = new Date().toISOString().slice(0, 10);
       const data = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=1');
-      return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || data) };
+      return { statusCode: 200, headers, body: JSON.stringify(data.routes?.[0] || data) };
     }
 
     if (action === 'delays') {
@@ -65,12 +65,12 @@ exports.handler = async (event) => {
         plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
       ]);
 
-      const trains  = opsData.trains || [];
-      const scheds  = schedData.trains || [];
+      const trains  = opsData.trains  || [];
+      const routes  = schedData.routes || [];
       const stNames = opsData.stations || {};
 
       const schedMap = {};
-      scheds.forEach(s => { schedMap[s.orderId] = s; });
+      routes.forEach(r => { schedMap[r.orderId] = r; });
 
       const result = {};
       stationIdList.forEach((stationId, idx) => {
@@ -87,16 +87,19 @@ exports.handler = async (event) => {
           const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
           if (!cancelled && delay <= 0) return;
 
-          const sched = schedMap[t.orderId] || {};
+          const r = schedMap[t.orderId] || {};
+          const routeStops = r.stations || r.stationList || [];
+          const lastStop   = routeStops[routeStops.length - 1];
+          const firstStop  = routeStops[0];
 
           delayed.push({
             cancelled,
             delay,
-            trainNumber: sched.trainNumber || sched.trainName || t.orderId || '—',
-            category:    sched.commercialCategoryName || sched.categoryName || sched.category || '',
-            carrier:     sched.carrierShortName || sched.carrierName || sched.carrier || '',
-            from:        sched.startStationName || sched.originStationName || '',
-            to:          sched.endStationName   || sched.destinationStationName || '',
+            trainNumber: r.nationalNumber || t.orderId || '—',
+            category:    r.commercialCategorySymbol || '',
+            carrier:     r.carrierCode || '',
+            from:        firstStop?.stationName || '',
+            to:          lastStop?.stationName  || '',
             plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
             actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
           });
