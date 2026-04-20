@@ -22,24 +22,36 @@ function plkGet(path) {
   });
 }
 
-// Czy czas odjazdu/przyjazdu ze stacji jest nie starszy niż 10 minut
+function parseStopTime(timeStr) {
+  if (!timeStr) return null;
+  try {
+    if (/^\d{2}:\d{2}/.test(timeStr)) {
+      const now = new Date();
+      const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+      const warsawNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
+      const utcNow    = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const offsetMs  = utcNow - warsawNow;
+      const local     = new Date(todayStr + 'T' + timeStr);
+      return new Date(local.getTime() + offsetMs);
+    } else {
+      return new Date(timeStr);
+    }
+  } catch { return null; }
+}
+
 function isRecent(stop) {
   const timeStr = stop.actualDeparture || stop.plannedDeparture
                 || stop.actualArrival  || stop.plannedArrival;
-  if (!timeStr) return true;
-  try {
-    let d;
-    if (/^\d{2}:\d{2}/.test(timeStr)) {
-      // Format HH:MM:SS — dołącz dzisiejszą datę
-      const today = new Date().toISOString().slice(0, 10);
-      d = new Date(today + 'T' + timeStr);
-    } else {
-      d = new Date(timeStr);
-    }
-    if (isNaN(d)) return true;
-    const diffMin = (Date.now() - d.getTime()) / 60000;
-    return diffMin < 10;
-  } catch { return true; }
+  const d = parseStopTime(timeStr);
+  if (!d || isNaN(d)) return true;
+  const diffMin = (Date.now() - d.getTime()) / 60000;
+  return diffMin < 10;
+}
+
+function timeToMinutes(timeStr) {
+  const d = parseStopTime(timeStr);
+  if (!d || isNaN(d)) return 9999;
+  return d.getHours() * 60 + d.getMinutes();
 }
 
 exports.handler = async (event) => {
@@ -84,20 +96,45 @@ exports.handler = async (event) => {
       const schedMap = {};
       routes.forEach(r => { schedMap[r.orderId] = r; });
 
+      // Znajdź opóźnione pociągi które przejdą filtry
+      const delayedTrains = [];
+      trains.forEach(t => {
+        if (t.trainStatus === 'C') return;
+        stationIdList.forEach(stationId => {
+          const stops = t.stations || [];
+          const stop  = stops.find(s => String(s.stationId) === String(stationId));
+          if (!stop) return;
+          if (!isRecent(stop)) return;
+          const cancelled = t.trainStatus === 'X';
+          const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
+          if (!cancelled && delay <= 0) return;
+          // Sprawdź czy już mamy ten pociąg
+          if (!delayedTrains.find(x => x.orderId === t.orderId)) {
+            delayedTrains.push(t);
+          }
+        });
+      });
+
+      // Pobierz pełne trasy dla opóźnionych pociągów (równolegle, max 20)
+      const routeMap = {};
+      const toFetch  = delayedTrains.slice(0, 20);
+      await Promise.all(toFetch.map(async t => {
+        try {
+          const data = await plkGet('/schedules/route/' + t.scheduleId + '/' + t.orderId);
+          routeMap[t.orderId] = data;
+        } catch(e) {}
+      }));
+
+      // Buduj wyniki per stacja
       const result = {};
       stationIdList.forEach((stationId, idx) => {
         const stationName = nameList[idx] || stNames[stationId] || stationId;
         const delayed = [];
 
-        trains.forEach(t => {
-          // Krok 1: pomiń zakończone (C) i wszystkie inne niż aktywne/odwołane
-          if (t.trainStatus === 'C') return;
-
+        delayedTrains.forEach(t => {
           const stops = t.stations || [];
           const stop  = stops.find(s => String(s.stationId) === String(stationId));
           if (!stop) return;
-
-          // Krok 2: pomiń jeśli odjazd z tej stacji był ponad 10 minut temu
           if (!isRecent(stop)) return;
 
           const cancelled = t.trainStatus === 'X';
@@ -105,29 +142,41 @@ exports.handler = async (event) => {
           if (!cancelled && delay <= 0) return;
 
           const r = schedMap[t.orderId] || {};
-          const routeStops  = r.stations || [];
-          const firstStopId = routeStops[0]?.stationId;
-          const lastStopId  = routeStops[routeStops.length - 1]?.stationId;
-          const from = firstStopId ? (stationNames[firstStopId]?.name || '') : '';
-          const to   = lastStopId  ? (stationNames[lastStopId]?.name  || '') : '';
-          const via  = routeStops
-            .slice(1, -1)
-            .map(s => stationNames[s.stationId]?.name || '')
-            .filter(Boolean);
-
           const carrierCode = r.carrierCode || '';
           const catSymbol   = r.commercialCategorySymbol || '';
-          const carrier     = carrierNames[carrierCode] || carrierCode;
-          const category    = catNames[catSymbol]       || catSymbol;
+
+          // Pełna trasa z /schedules/route
+          const fullRoute   = routeMap[t.orderId];
+          const fullStops   = fullRoute?.stations || fullRoute?.routes?.[0]?.stations || [];
+          const allStopNames = dict.stations || {};
+
+          // Pierwsza i ostatnia stacja z pełnej trasy
+          let from = '', to = '', via = [];
+          if (fullStops.length > 0) {
+            const firstId = fullStops[0]?.stationId;
+            const lastId  = fullStops[fullStops.length - 1]?.stationId;
+            from = firstId ? (allStopNames[firstId]?.name || stationNames[firstId]?.name || '') : '';
+            to   = lastId  ? (allStopNames[lastId]?.name  || stationNames[lastId]?.name  || '') : '';
+            via  = fullStops
+              .slice(1, -1)
+              .map(s => (allStopNames[s.stationId]?.name || stationNames[s.stationId]?.name || ''))
+              .filter(Boolean);
+          } else {
+            // Fallback — brak pełnej trasy
+            const localFirst = r.stations?.[0]?.stationId;
+            const localLast  = r.stations?.[r.stations?.length - 1]?.stationId;
+            from = localFirst ? (stationNames[localFirst]?.name || '') : '';
+            to   = localLast  ? (stationNames[localLast]?.name  || '') : '';
+          }
 
           delayed.push({
             cancelled,
             delay,
-            trainNumber: r.nationalNumber  || t.orderId || '—',
-            trainName:   r.name            || '',
-            category,
+            trainNumber: r.nationalNumber || t.orderId || '—',
+            trainName:   r.name           || '',
+            category:    catNames[catSymbol]       || catSymbol,
             catSymbol,
-            carrier,
+            carrier:     carrierNames[carrierCode] || carrierCode,
             carrierCode,
             from,
             to,
@@ -137,10 +186,7 @@ exports.handler = async (event) => {
           });
         });
 
-        delayed.sort((a, b) => {
-          if (a.cancelled !== b.cancelled) return a.cancelled ? -1 : 1;
-          return b.delay - a.delay;
-        });
+        delayed.sort((a, b) => timeToMinutes(a.plannedTime) - timeToMinutes(b.plannedTime));
 
         if (delayed.length > 0) {
           result[stationId] = { name: stationName, trains: delayed };
