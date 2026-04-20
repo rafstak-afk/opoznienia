@@ -167,7 +167,7 @@
         if (!st || !st.trains.length) return;
 
         // Filtruj stare pociągi po stronie przeglądarki
-        const trains = st.trains.filter(t => t.cancelled || isStillRelevant(t.plannedTime, t.delay));
+        const trains = st.trains;
         if (!trains.length) return;
         anyShown = true;
 
