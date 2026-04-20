@@ -28,13 +28,20 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json'
   };
 
+  const action = event.queryStringParameters?.action || 'delays';
+
   try {
-    const action = event.queryStringParameters?.action || 'delays';
 
     if (action === 'search') {
       const q = event.queryStringParameters?.q || '';
       const data = await plkGet('/dictionaries/stations?search=' + encodeURIComponent(q) + '&pageSize=8');
       return { statusCode: 200, headers, body: JSON.stringify(data) };
+    }
+
+    if (action === 'raw') {
+      const ids = event.queryStringParameters?.ids || '';
+      const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=1');
+      return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || {}) };
     }
 
     if (action === 'delays') {
@@ -45,58 +52,42 @@ exports.handler = async (event) => {
       const stationIdList = ids.split(',').map(s => s.trim());
       const nameList      = names ? names.split('|') : stationIdList;
 
-      // Pobierz bez fullRoutes — mniejszy payload, szybciej
-      // withPlanned=true potrzebne do pól *DelayMinutes
-      const data = await plkGet(
-        '/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'
-      );
-
+      const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500');
       const trains  = data.trains || [];
-      if (event.queryStringParameters?.raw === 'true') {
-  return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || {}) };
-}
-      const stNames = data.stations || {}; // mapa id->nazwa stacji z odpowiedzi
+      const stNames = data.stations || {};
 
       const result = {};
-
       stationIdList.forEach((stationId, idx) => {
         const stationName = nameList[idx] || stNames[stationId] || stationId;
         const delayed = [];
-
         trains.forEach(t => {
           if (t.trainStatus === 'C') return;
-
           const stops = t.stations || [];
           const stop  = stops.find(s => String(s.stationId) === String(stationId));
           if (!stop) return;
-
           const cancelled = t.trainStatus === 'X';
           const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
           if (!cancelled && delay <= 0) return;
-
           delayed.push({
             cancelled,
             delay,
-            trainNumber: t.trainNumber || t.orderId || '—',
-            category:    t.commercialCategoryName || t.category || '',
-            carrier:     t.carrierShortName || t.carrier || '',
-            from:        t.startStationName || '',
-            to:          t.endStationName   || '',
+            trainNumber: t.trainNumber || t.trainName || t.orderId || '—',
+            category:    t.commercialCategoryName || t.categoryName || t.category || '',
+            carrier:     t.carrierShortName || t.carrierName || t.carrier || '',
+            from:        t.startStationName || t.originStationName || t.fromStation || '',
+            to:          t.endStationName   || t.destinationStationName || t.toStation || '',
             plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
             actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
           });
         });
-
         delayed.sort((a, b) => {
           if (a.cancelled !== b.cancelled) return a.cancelled ? -1 : 1;
           return b.delay - a.delay;
         });
-
         if (delayed.length > 0) {
           result[stationId] = { name: stationName, trains: delayed };
         }
       });
-
       return { statusCode: 200, headers, body: JSON.stringify(result) };
     }
 
