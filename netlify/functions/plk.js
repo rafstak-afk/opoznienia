@@ -38,6 +38,17 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify(data) };
     }
 
+    if (action === 'route') {
+      const ids = event.queryStringParameters?.ids || '';
+      const num = event.queryStringParameters?.num || '';
+      const today = new Date().toISOString().slice(0, 10);
+      const sched = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500');
+      const found = (sched.routes || []).find(r => r.nationalNumber === num);
+      if (!found) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Nie znaleziono' }) };
+      const route = await plkGet('/schedules/route/' + found.scheduleId + '/' + found.orderId);
+      return { statusCode: 200, headers, body: JSON.stringify({ train: found, route, dict: sched.dictionaries }) };
+    }
+
     if (action === 'delays') {
       const ids   = event.queryStringParameters?.ids   || '';
       const names = event.queryStringParameters?.names || '';
