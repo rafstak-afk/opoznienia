@@ -119,12 +119,14 @@ exports.handler = async (event) => {
           // Relacja z pełnej trasy
           const fullRoute  = routeMap[t.orderId];
           const fullStops  = fullRoute?.stations || [];
+          // Każde route ma własny dict.stations z wszystkimi stacjami tej trasy
+          const routeDict  = fullRoute?.dictionaries?.stations || fullRoute?.dict?.stations || {};
           let from = '', to = '';
           if (fullStops.length > 0) {
             const firstId = fullStops[0]?.stationId;
             const lastId  = fullStops[fullStops.length - 1]?.stationId;
-            from = firstId ? (stationNames[firstId]?.name || '') : '';
-            to   = lastId  ? (stationNames[lastId]?.name  || '') : '';
+            from = firstId ? (routeDict[firstId]?.name || stationNames[firstId]?.name || '') : '';
+            to   = lastId  ? (routeDict[lastId]?.name  || stationNames[lastId]?.name  || '') : '';
           }
 
           delayed.push({
