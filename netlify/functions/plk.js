@@ -58,11 +58,9 @@ exports.handler = async (event) => {
       const nameList      = names ? names.split('|') : stationIdList;
       const today         = new Date().toISOString().slice(0, 10);
 
-      // Trzy zapytania równolegle: operacje, rozkład lokalny, słownik wszystkich stacji
-      const [opsData, schedData, allStationsData] = await Promise.all([
+      const [opsData, schedData] = await Promise.all([
         plkGet('/operations?stations=' + ids + '&withPlanned=true&pageSize=500'),
-        plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500'),
-        plkGet('/dictionaries/stations?pageSize=5000')
+        plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
       ]);
 
       const trains  = opsData.trains  || [];
@@ -70,26 +68,36 @@ exports.handler = async (event) => {
       const stNames = opsData.stations || {};
 
       const dict         = schedData.dictionaries || {};
+      const stationNames = dict.stations   || {};
       const carrierNames = dict.carriers   || {};
       const catNames     = dict.commercialCategories || {};
 
-      // Pełny słownik stacji — z /dictionaries/stations
-      const allStations = {};
-      const stList = allStationsData.stations || allStationsData.data || allStationsData || [];
-      if (Array.isArray(stList)) {
-        stList.forEach(s => { allStations[s.id || s.stationId] = s.name || s.stationName; });
-      } else if (typeof stList === 'object') {
-        Object.values(stList).forEach(s => { allStations[s.id] = s.name; });
-      }
-
-      // Uzupełnij lokalnym słownikiem z rozkładu
-      const localStations = dict.stations || {};
-      Object.entries(localStations).forEach(([id, s]) => {
-        if (!allStations[id]) allStations[id] = s.name || s;
-      });
-
       const schedMap = {};
       routes.forEach(r => { schedMap[r.orderId] = r; });
+
+      // Zbierz unikalne opóźnione pociągi
+      const delayedSet = new Map();
+      trains.forEach(t => {
+        if (t.trainStatus === 'C') return;
+        stationIdList.forEach(stationId => {
+          const stop = (t.stations || []).find(s => String(s.stationId) === String(stationId));
+          if (!stop) return;
+          const cancelled = t.trainStatus === 'X';
+          const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
+          if (!cancelled && delay <= 0) return;
+          if (!delayedSet.has(t.orderId)) delayedSet.set(t.orderId, t);
+        });
+      });
+
+      // Pobierz pełne trasy równolegle (max 15)
+      const routeMap = {};
+      const toFetch = [...delayedSet.values()].slice(0, 15);
+      await Promise.all(toFetch.map(async t => {
+        try {
+          const data = await plkGet('/schedules/route/' + t.scheduleId + '/' + t.orderId);
+          routeMap[t.orderId] = data;
+        } catch(e) {}
+      }));
 
       const result = {};
       stationIdList.forEach((stationId, idx) => {
@@ -98,24 +106,26 @@ exports.handler = async (event) => {
 
         trains.forEach(t => {
           if (t.trainStatus === 'C') return;
-
-          const stops = t.stations || [];
-          const stop  = stops.find(s => String(s.stationId) === String(stationId));
+          const stop = (t.stations || []).find(s => String(s.stationId) === String(stationId));
           if (!stop) return;
-
           const cancelled = t.trainStatus === 'X';
-          const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
+          const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
           if (!cancelled && delay <= 0) return;
 
           const r           = schedMap[t.orderId] || {};
           const carrierCode = r.carrierCode || '';
           const catSymbol   = r.commercialCategorySymbol || '';
 
-          // Relacja z pełnej listy przystanków pociągu (t.stations)
-          const firstStop = stops[0];
-          const lastStop  = stops[stops.length - 1];
-          const from = firstStop ? (allStations[firstStop.stationId] || '') : '';
-          const to   = lastStop  ? (allStations[lastStop.stationId]  || '') : '';
+          // Relacja z pełnej trasy
+          const fullRoute  = routeMap[t.orderId];
+          const fullStops  = fullRoute?.stations || [];
+          let from = '', to = '';
+          if (fullStops.length > 0) {
+            const firstId = fullStops[0]?.stationId;
+            const lastId  = fullStops[fullStops.length - 1]?.stationId;
+            from = firstId ? (stationNames[firstId]?.name || '') : '';
+            to   = lastId  ? (stationNames[lastId]?.name  || '') : '';
+          }
 
           delayed.push({
             cancelled,
