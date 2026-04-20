@@ -52,6 +52,9 @@ exports.handler = async (event) => {
       );
 
       const trains  = data.trains || [];
+      if (event.queryStringParameters?.raw === 'true') {
+  return { statusCode: 200, headers, body: JSON.stringify(data.trains?.[0] || {}) };
+}
       const stNames = data.stations || {}; // mapa id->nazwa stacji z odpowiedzi
 
       const result = {};
