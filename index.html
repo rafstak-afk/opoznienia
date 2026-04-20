@@ -142,7 +142,7 @@
     document.getElementById('upd').textContent = '';
 
     try {
-      const res = await fetch('/.netlify/functions/plk?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES));
+      const res = await fetch('/api?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
 
