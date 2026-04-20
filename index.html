@@ -49,17 +49,13 @@
       padding: 0.75rem 0.875rem; margin-bottom: 6px;
       display: grid; grid-template-columns: 56px 1fr auto; gap: 0 12px; align-items: center;
     }
-    .train-row.cancel {
-      animation: pulse-cancel 2.5s ease-in-out infinite;
-    }
+    .train-row.cancel { animation: pulse-cancel 2.5s ease-in-out infinite; }
     @keyframes pulse-cancel {
       0%   { background: rgba(192,57,43,0.04); border-color: rgba(192,57,43,0.15); }
       50%  { background: rgba(192,57,43,0.11); border-color: rgba(192,57,43,0.35); }
       100% { background: rgba(192,57,43,0.04); border-color: rgba(192,57,43,0.15); }
     }
-    .train-row.big {
-      animation: pulse-big 2.5s ease-in-out infinite;
-    }
+    .train-row.big { animation: pulse-big 2.5s ease-in-out infinite; }
     @keyframes pulse-big {
       0%   { background: rgba(255,200,0,0.06); border-color: rgba(200,150,0,0.15); }
       50%  { background: rgba(255,200,0,0.18); border-color: rgba(200,150,0,0.40); }
@@ -75,8 +71,8 @@
     .t-plan   { font-family: var(--mono); font-size: 14px; font-weight: 500; }
     .t-act    { font-family: var(--mono); font-size: 11px; color: var(--red); margin-top: 1px; }
     .t-cancel { font-family: var(--mono); font-size: 11px; color: var(--red); }
-    .empty   { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
-    .err     { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
+    .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
+    .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
     .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
     #spinner { text-align: center; padding: 3rem 1rem; color: var(--text3); font-family: var(--mono); font-size: 13px; }
   </style>
@@ -97,7 +93,6 @@
   <div class="updated" id="upd"></div>
 </div>
 <script>
-  // ID zahardkodowane — jedno zapytanie zamiast dziewięciu
   const STATIONS = [
     { id: 71001, name: 'Tarnowskie Góry' },
     { id: 72306, name: 'Bytom' },
@@ -110,23 +105,8 @@
     { id: 62653, name: 'Częstochowa' },
   ];
 
-  const IDS = STATIONS.map(s => s.id).join(',');
-
-  async function api(params) {
-    const res = await fetch('/.netlify/functions/plk?' + new URLSearchParams(params));
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.json();
-  }
-
-  function getStop(train, stationId) {
-    const stops = train.stations || [];
-    return stops.find(s => String(s.stationId) === String(stationId));
-  }
-
-  function getDelay(stop) {
-    if (!stop) return 0;
-    return Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
-  }
+  const IDS   = STATIONS.map(s => s.id).join(',');
+  const NAMES = STATIONS.map(s => s.name).join('|');
 
   function fmtTime(val) {
     if (!val) return '';
@@ -145,69 +125,50 @@
     document.getElementById('upd').textContent = '';
 
     try {
-      // Jedno zapytanie dla wszystkich stacji naraz
-      const d = await api({ action: 'operations', ids: IDS });
-      const trains = Array.isArray(d.trains) ? d.trains : [];
-      const active = trains.filter(t => t.trainStatus !== 'C');
+      const res = await fetch('/.netlify/functions/plk?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
 
       document.getElementById('spinner').style.display = 'none';
       const content = document.getElementById('content');
       let anyShown = false;
 
       STATIONS.forEach(station => {
-        const toShow = active
-          .map(t => {
-            const stop      = getStop(t, station.id);
-            const delay     = getDelay(stop);
-            const cancelled = t.trainStatus === 'X';
-            return { t, stop, delay, cancelled };
-          })
-          .filter(x => (x.delay > 0 || x.cancelled) && x.stop)
-          .sort((a, b) => {
-            if (a.cancelled !== b.cancelled) return a.cancelled ? -1 : 1;
-            return b.delay - a.delay;
-          });
-
-        if (!toShow.length) return;
+        const st = data[station.id];
+        if (!st || !st.trains.length) return;
         anyShown = true;
 
-        const block = document.createElement('div');
-        block.className = 'station-block';
-        const cancelCount = toShow.filter(x => x.cancelled).length;
-        const delayCount  = toShow.filter(x => !x.cancelled).length;
+        const cancelCount = st.trains.filter(t => t.cancelled).length;
+        const delayCount  = st.trains.filter(t => !t.cancelled).length;
         const parts = [];
         if (cancelCount) parts.push(cancelCount + ' odwołanych');
         if (delayCount)  parts.push(delayCount  + ' opóźnionych');
 
+        const block = document.createElement('div');
+        block.className = 'station-block';
         block.innerHTML = `
           <div class="station-header">
-            <div class="station-name">${station.name}</div>
+            <div class="station-name">${st.name}</div>
             <div class="station-count">${parts.join(' · ')}</div>
           </div>`;
 
-        toShow.forEach(({ t, stop, delay, cancelled }) => {
-          const big  = !cancelled && delay >= 15;
-          const num  = t.trainNumber || t.trainName || t.orderId || '—';
-          const cat  = t.commercialCategoryName || t.category || t.trainCategory || '';
-          const car  = t.carrierShortName || t.carrier || '';
-          const from = t.startStationName || t.originStationName || '';
-          const to   = t.endStationName   || t.destinationStationName || '';
-          const plan = fmtTime(stop?.plannedDeparture || stop?.plannedArrival || '');
-          const act  = fmtTime(stop?.actualDeparture  || stop?.actualArrival  || '');
-
-          const row = document.createElement('div');
-          row.className = 'train-row' + (cancelled ? ' cancel' : big ? ' big' : '');
+        st.trains.forEach(t => {
+          const big = !t.cancelled && t.delay >= 15;
+          const plan = fmtTime(t.plannedTime);
+          const act  = fmtTime(t.actualTime);
+          const row  = document.createElement('div');
+          row.className = 'train-row' + (t.cancelled ? ' cancel' : big ? ' big' : '');
           row.innerHTML = `
-            <div class="delay${cancelled ? ' cancel' : big ? ' big' : ''}">
-              ${cancelled ? 'ODWOŁANY' : '+' + delay + "'"}
+            <div class="delay${t.cancelled ? ' cancel' : big ? ' big' : ''}">
+              ${t.cancelled ? 'ODWOŁANY' : '+' + t.delay + "'"}
             </div>
             <div class="train-info">
-              <div class="train-nm">${cat} ${num}</div>
-              <div class="train-meta">${car}${from ? ' · '+from : ''}${to ? ' → '+to : ''}</div>
+              <div class="train-nm">${t.category} ${t.trainNumber}</div>
+              <div class="train-meta">${t.carrier}${t.from ? ' · '+t.from : ''}${t.to ? ' → '+t.to : ''}</div>
             </div>
             <div class="train-time">
-              <div class="t-plan${cancelled ? ' t-cancel' : ''}">${plan}</div>
-              ${!cancelled && act && act !== plan ? `<div class="t-act">${act}</div>` : ''}
+              <div class="t-plan${t.cancelled ? ' t-cancel' : ''}">${plan}</div>
+              ${!t.cancelled && act && act !== plan ? `<div class="t-act">${act}</div>` : ''}
             </div>`;
           block.appendChild(row);
         });
