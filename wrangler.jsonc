@@ -1,0 +1,11 @@
+{
+  "name": "opoznienia",
+  "compatibility_date": "2026-04-20",
+  "main": "worker.js",
+  "assets": {
+    "directory": "."
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
