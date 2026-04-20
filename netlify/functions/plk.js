@@ -16,42 +16,10 @@ function plkGet(path) {
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch(e) { reject(new Error('Błąd parsowania: ' + data.slice(0, 100))); }
+        catch(e) { reject(new Error('Błąd: ' + data.slice(0, 100))); }
       });
     }).on('error', reject);
   });
-}
-
-function parseStopTime(timeStr) {
-  if (!timeStr) return null;
-  try {
-    if (/^\d{2}:\d{2}/.test(timeStr)) {
-      const now = new Date();
-      const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
-      const warsawNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
-      const utcNow    = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-      const offsetMs  = utcNow - warsawNow;
-      const local     = new Date(todayStr + 'T' + timeStr);
-      return new Date(local.getTime() + offsetMs);
-    } else {
-      return new Date(timeStr);
-    }
-  } catch { return null; }
-}
-
-function isRecent(stop) {
-  const timeStr = stop.actualDeparture || stop.plannedDeparture
-                || stop.actualArrival  || stop.plannedArrival;
-  const d = parseStopTime(timeStr);
-  if (!d || isNaN(d)) return true;
-  const diffMin = (Date.now() - d.getTime()) / 60000;
-  return diffMin < 10;
-}
-
-function timeToMinutes(timeStr) {
-  const d = parseStopTime(timeStr);
-  if (!d || isNaN(d)) return 9999;
-  return d.getHours() * 60 + d.getMinutes();
 }
 
 exports.handler = async (event) => {
@@ -96,78 +64,30 @@ exports.handler = async (event) => {
       const schedMap = {};
       routes.forEach(r => { schedMap[r.orderId] = r; });
 
-      // Znajdź opóźnione pociągi które przejdą filtry
-      const delayedTrains = [];
-      trains.forEach(t => {
-        if (t.trainStatus === 'C') return;
-        stationIdList.forEach(stationId => {
-          const stops = t.stations || [];
-          const stop  = stops.find(s => String(s.stationId) === String(stationId));
-          if (!stop) return;
-          if (!isRecent(stop)) return;
-          const cancelled = t.trainStatus === 'X';
-          const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
-          if (!cancelled && delay <= 0) return;
-          // Sprawdź czy już mamy ten pociąg
-          if (!delayedTrains.find(x => x.orderId === t.orderId)) {
-            delayedTrains.push(t);
-          }
-        });
-      });
-
-      // Pobierz pełne trasy dla opóźnionych pociągów (równolegle, max 20)
-      const routeMap = {};
-      const toFetch  = delayedTrains.slice(0, 20);
-      await Promise.all(toFetch.map(async t => {
-        try {
-          const data = await plkGet('/schedules/route/' + t.scheduleId + '/' + t.orderId);
-          routeMap[t.orderId] = data;
-        } catch(e) {}
-      }));
-
-      // Buduj wyniki per stacja
       const result = {};
       stationIdList.forEach((stationId, idx) => {
         const stationName = nameList[idx] || stNames[stationId] || stationId;
         const delayed = [];
 
-        delayedTrains.forEach(t => {
+        trains.forEach(t => {
+          if (t.trainStatus === 'C') return;
+
           const stops = t.stations || [];
           const stop  = stops.find(s => String(s.stationId) === String(stationId));
           if (!stop) return;
-          if (!isRecent(stop)) return;
 
           const cancelled = t.trainStatus === 'X';
           const delay     = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
           if (!cancelled && delay <= 0) return;
 
-          const r = schedMap[t.orderId] || {};
+          const r           = schedMap[t.orderId] || {};
           const carrierCode = r.carrierCode || '';
           const catSymbol   = r.commercialCategorySymbol || '';
-
-          // Pełna trasa z /schedules/route
-          const fullRoute   = routeMap[t.orderId];
-          const fullStops   = fullRoute?.stations || fullRoute?.routes?.[0]?.stations || [];
-          const allStopNames = dict.stations || {};
-
-          // Pierwsza i ostatnia stacja z pełnej trasy
-          let from = '', to = '', via = [];
-          if (fullStops.length > 0) {
-            const firstId = fullStops[0]?.stationId;
-            const lastId  = fullStops[fullStops.length - 1]?.stationId;
-            from = firstId ? (allStopNames[firstId]?.name || stationNames[firstId]?.name || '') : '';
-            to   = lastId  ? (allStopNames[lastId]?.name  || stationNames[lastId]?.name  || '') : '';
-            via  = fullStops
-              .slice(1, -1)
-              .map(s => (allStopNames[s.stationId]?.name || stationNames[s.stationId]?.name || ''))
-              .filter(Boolean);
-          } else {
-            // Fallback — brak pełnej trasy
-            const localFirst = r.stations?.[0]?.stationId;
-            const localLast  = r.stations?.[r.stations?.length - 1]?.stationId;
-            from = localFirst ? (stationNames[localFirst]?.name || '') : '';
-            to   = localLast  ? (stationNames[localLast]?.name  || '') : '';
-          }
+          const routeStops  = r.stations || [];
+          const firstStopId = routeStops[0]?.stationId;
+          const lastStopId  = routeStops[routeStops.length - 1]?.stationId;
+          const from = firstStopId ? (stationNames[firstStopId]?.name || '') : '';
+          const to   = lastStopId  ? (stationNames[lastStopId]?.name  || '') : '';
 
           delayed.push({
             cancelled,
@@ -180,13 +100,17 @@ exports.handler = async (event) => {
             carrierCode,
             from,
             to,
-            via,
+            via: [],
             plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
             actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
           });
         });
 
-        delayed.sort((a, b) => timeToMinutes(a.plannedTime) - timeToMinutes(b.plannedTime));
+        delayed.sort((a, b) => {
+          const ta = a.plannedTime.slice(0,5) || '99:99';
+          const tb = b.plannedTime.slice(0,5) || '99:99';
+          return ta.localeCompare(tb);
+        });
 
         if (delayed.length > 0) {
           result[stationId] = { name: stationName, trains: delayed };
