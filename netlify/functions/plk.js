@@ -38,22 +38,6 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify(data) };
     }
 
-    if (action === 'rawsched') {
-      const ids = event.queryStringParameters?.ids || '';
-      const today = new Date().toISOString().slice(0, 10);
-      const data = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=1');
-      return { statusCode: 200, headers, body: JSON.stringify(data.routes?.[0] || data) };
-    }
-
-    if (action === 'rawtrain') {
-      const ids = event.queryStringParameters?.ids || '';
-      const num = event.queryStringParameters?.num || '';
-      const today = new Date().toISOString().slice(0, 10);
-      const data = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500');
-      const found = (data.routes || []).find(r => r.nationalNumber === num);
-      return { statusCode: 200, headers, body: JSON.stringify({ train: found || null, dictionaries: data.dictionaries }) };
-    }
-
     if (action === 'delays') {
       const ids   = event.queryStringParameters?.ids   || '';
       const names = event.queryStringParameters?.names || '';
@@ -71,8 +55,14 @@ exports.handler = async (event) => {
       const trains  = opsData.trains  || [];
       const routes  = schedData.routes || [];
       const stNames = opsData.stations || {};
-      const stationNames = schedData.dictionaries?.stations || {};
 
+      // Słowniki z rozkładu
+      const dict         = schedData.dictionaries || {};
+      const stationNames = dict.stations   || {};  // {id: {id, name}}
+      const carrierNames = dict.carriers   || {};  // {code: name}
+      const catNames     = dict.commercialCategories || {};
+
+      // Mapa orderId -> dane z rozkładu
       const schedMap = {};
       routes.forEach(r => { schedMap[r.orderId] = r; });
 
@@ -92,24 +82,33 @@ exports.handler = async (event) => {
           if (!cancelled && delay <= 0) return;
 
           const r = schedMap[t.orderId] || {};
-          const routeStops = r.stations || [];
+
+          // Stacje pośrednie z rozkładu dla tej trasy (wszystkie oprócz pierwszej i ostatniej)
+          const routeStops  = r.stations || [];
           const firstStopId = routeStops[0]?.stationId;
           const lastStopId  = routeStops[routeStops.length - 1]?.stationId;
-          const from = firstStopId ? (stationNames[firstStopId] || '') : '';
-          const to   = lastStopId  ? (stationNames[lastStopId]  || '') : '';
-
-          // Stacje pośrednie — wszystkie między pierwszą a ostatnią
-          const via = routeStops
+          const from = firstStopId ? (stationNames[firstStopId]?.name || '') : '';
+          const to   = lastStopId  ? (stationNames[lastStopId]?.name  || '') : '';
+          const via  = routeStops
             .slice(1, -1)
-            .map(s => stationNames[s.stationId] || '')
+            .map(s => stationNames[s.stationId]?.name || '')
             .filter(Boolean);
+
+          // Pełna nazwa przewoźnika i kategorii
+          const carrierCode = r.carrierCode || '';
+          const catSymbol   = r.commercialCategorySymbol || '';
+          const carrier     = carrierNames[carrierCode] || carrierCode;
+          const category    = catNames[catSymbol]       || catSymbol;
 
           delayed.push({
             cancelled,
             delay,
-            trainNumber: r.nationalNumber || t.orderId || '—',
-            category:    r.commercialCategorySymbol || '',
-            carrier:     r.carrierCode || '',
+            trainNumber: r.nationalNumber  || t.orderId || '—',
+            trainName:   r.name            || '',
+            category,
+            catSymbol,
+            carrier,
+            carrierCode,
             from,
             to,
             via,
