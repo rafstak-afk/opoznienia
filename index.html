@@ -182,7 +182,14 @@
           content.appendChild(block);
           return;
         }
-        const trains = allTrains;
+        // Odfiltruj zduplikowane/zepsute rekordy (brak nazwy i numeryczny orderId)
+        const trains = allTrains.filter(t => {
+          if (t.cancelled) return true;
+          const num = String(t.trainNumber);
+          // Jeśli numer > 8 cyfr i brak nazwy — to wewnętrzny orderId, nie prawdziwy numer
+          if (num.length > 8 && !t.trainName && !t.catSymbol) return false;
+          return true;
+        });
         anyShown = true;
 
         const cancelCount = trains.filter(t => t.cancelled).length;
