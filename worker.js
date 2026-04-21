@@ -80,15 +80,25 @@ export default {
         });
 
         // Pobierz pełne trasy tylko dla IC/EC/TLK (max 10)
+        // Użyj scheduleId/orderId z rozkładu (schedMap) a nie z operacji
         const routeMap = {};
-        const toFetch = trains
-          .filter(t => longDistanceIds.has(t.orderId))
-          .slice(0, 10);
+        const toFetch = [...longDistanceIds].slice(0, 10);
 
-        await Promise.all(toFetch.map(async t => {
+        await Promise.all(toFetch.map(async orderId => {
           try {
-            const data = await plkGet('/schedules/route/' + t.scheduleId + '/' + t.orderId);
-            routeMap[t.orderId] = data;
+            const r = schedMap[orderId];
+            if (r && r.scheduleId && r.orderId) {
+              // Użyj danych z rozkładu
+              const data = await plkGet('/schedules/route/' + r.scheduleId + '/' + r.orderId);
+              routeMap[orderId] = data;
+            } else {
+              // Fallback: użyj danych z operacji
+              const t = trains.find(x => x.orderId === orderId);
+              if (t) {
+                const data = await plkGet('/schedules/route/' + t.scheduleId + '/' + t.orderId);
+                routeMap[orderId] = data;
+              }
+            }
           } catch(e) {}
         }));
 
@@ -146,6 +156,20 @@ export default {
           delayed.sort((a, b) => (a.plannedTime.slice(0,5) || '99:99').localeCompare(b.plannedTime.slice(0,5) || '99:99'));
           if (delayed.length > 0) result[stationId] = { name: stationName, trains: delayed };
         });
+
+        // Debug info
+        const debug = {};
+        toFetch.forEach(orderId => {
+          const r = schedMap[orderId];
+          debug[orderId] = {
+            inSchedMap: !!r,
+            schedMapOrderId: r?.orderId,
+            schedMapScheduleId: r?.scheduleId,
+            hasRoute: !!routeMap[orderId],
+            routeStations: routeMap[orderId]?.stations?.length || 0
+          };
+        });
+        result._debug = debug;
 
         return json(result);
       }
