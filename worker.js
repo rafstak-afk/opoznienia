@@ -1,266 +1,108 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Opóźnienia">
-  <title>Opóźnienia pociągów</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #f7f5f0; --surface: #ffffff;
-      --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.14);
-      --text: #1a1a18; --text2: #6b6b66; --text3: #a0a09a;
-      --accent: #b8860b; --red: #c0392b;
-      --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
-    }
-    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
-    header {
-      padding: 2.5rem 1.25rem 1.25rem;
-      border-bottom: 1px solid var(--border);
-      display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem;
-      position: sticky; top: 0; background: var(--bg); z-index: 10;
-    }
-    .header-left h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
-    .header-left p  { font-size: 12px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
-    .refresh-btn {
-      background: var(--surface); border: 1px solid var(--border2); border-radius: 8px;
-      color: var(--text); font-family: var(--sans); font-size: 13px;
-      padding: 0.5rem 0.875rem; cursor: pointer;
-      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .spin { display: inline-block; }
-    .loading .spin { animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .container { padding: 0 1rem 2rem; max-width: 700px; margin: 0 auto; }
-    .station-block { margin-top: 1.5rem; }
-    .station-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.5rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border);
-    }
-    .station-name  { font-size: 15px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--sans); }
-    .station-count { font-size: 11px; font-family: var(--mono); color: var(--text3); }
+const KEY  = 'A8rVZK-wu6MvMu8Chpn7y3ZRSGgu9o07DBgXSfolbsqJQIdc-DfUwzqLOOc1RUyBhCLafFuBFf1WSwwA8WMXTg';
+const BASE = 'https://pdp-api.plk-sa.pl/api/v1';
 
-    .train-row {
-      background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
-      padding: 0.75rem 0.875rem; margin-bottom: 6px;
-    }
-    .train-row.cancel { animation: pulse-cancel 2.5s ease-in-out infinite; }
-    @keyframes pulse-cancel {
-      0%   { background: rgba(192,57,43,0.04); border-color: rgba(192,57,43,0.15); }
-      50%  { background: rgba(192,57,43,0.11); border-color: rgba(192,57,43,0.35); }
-      100% { background: rgba(192,57,43,0.04); border-color: rgba(192,57,43,0.15); }
-    }
-    .train-row.big { animation: pulse-big 2.5s ease-in-out infinite; }
-    @keyframes pulse-big {
-      0%   { background: rgba(255,200,0,0.06); border-color: rgba(200,150,0,0.15); }
-      50%  { background: rgba(255,200,0,0.18); border-color: rgba(200,150,0,0.40); }
-      100% { background: rgba(255,200,0,0.06); border-color: rgba(200,150,0,0.15); }
-    }
+async function plkGet(path) {
+  const res = await fetch(BASE + path, { headers: { 'X-API-Key': KEY } });
+  if (!res.ok) throw new Error('PLK HTTP ' + res.status);
+  return res.json();
+}
 
-    .train-top {
-      display: grid; grid-template-columns: 56px 1fr auto; gap: 0 12px; align-items: start;
-    }
-    .delay { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--accent); text-align: right; padding-top: 1px; }
-    .delay.big    { color: var(--red); }
-    .delay.cancel { color: var(--red); font-size: 11px; line-height: 1.3; }
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: CORS });
+}
 
-    .train-info { min-width: 0; }
-    .train-nm   { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .train-carrier { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-top: 1px; }
-
-    .train-time { text-align: right; flex-shrink: 0; }
-    .t-plan   { font-family: var(--mono); font-size: 14px; font-weight: 500; }
-    .t-act    { font-family: var(--mono); font-size: 11px; color: var(--red); margin-top: 1px; }
-    .t-cancel { font-family: var(--mono); font-size: 11px; color: var(--red); }
-
-    .train-route {
-      margin-top: 6px; padding-top: 6px;
-      border-top: 0.5px solid var(--border);
-      font-size: 11px; color: var(--text2);
-      font-family: var(--mono);
-      line-height: 1.5;
-    }
-    .train-route .relation { color: var(--text); font-weight: 500; }
-    .train-route .via-stops { color: var(--text3); margin-top: 1px; }
-
-    .empty-station { font-size: 12px; color: var(--text3); font-family: var(--mono); padding: 0.5rem 0 0.25rem; }
-    .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
-    .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
-    .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
-    #spinner { text-align: center; padding: 3rem 1rem; color: var(--text3); font-family: var(--mono); font-size: 13px; }
-  </style>
-</head>
-<body>
-<header>
-  <div class="header-left">
-    <h1>Opóźnienia pociągów</h1>
-    <p>dane real-time · PLK API</p>
-  </div>
-  <button class="refresh-btn" id="rbtn" onclick="load()">
-    <span class="spin">↻</span> Odśwież
-  </button>
-</header>
-<div class="container">
-  <div id="spinner">Pobieram dane…</div>
-  <div id="content"></div>
-  <div class="updated" id="upd"></div>
-</div>
-<script>
-  const STATIONS = [
-    { id: 71001, name: 'Tarnowskie Góry' },
-    { id: 72306, name: 'Bytom' },
-    { id: 73106, name: 'Chorzów Batory' },
-    { id: 73312, name: 'Katowice' },
-    { id: 69708, name: 'Gliwice' },
-    { id: 71407, name: 'Lubliniec' },
-    { id: 80416, name: 'Kraków Główny' },
-    { id: 75309, name: 'Zawiercie' },
-    { id: 62653, name: 'Częstochowa' },
-  ];
-
-  const IDS   = STATIONS.map(s => s.id).join(',');
-  const NAMES = STATIONS.map(s => s.name).join('|');
-
-  function fmtTime(val) {
-    if (!val) return '';
-    if (/^\d{2}:\d{2}/.test(val)) return val.slice(0, 5);
-    try {
-      const d = new Date(val);
-      return isNaN(d) ? val : d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
-    } catch { return val; }
-  }
-
-  function isStillRelevant(plannedTime, delay) {
-    if (!plannedTime) return true;
-    try {
-      const [h, m] = plannedTime.slice(0, 5).split(':').map(Number);
-      const plannedMin = h * 60 + m;
-      const actualMin  = plannedMin + (delay || 0);
-      // Użyj czasu polskiego niezależnie od ustawień telefonu
-      const nowStr = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour12: false });
-      const [nh, nm] = nowStr.slice(0, 5).split(':').map(Number);
-      const nowMin = nh * 60 + nm;
-      return nowMin < actualMin + 10;
-    } catch { return true; }
-  }
-
-  async function load() {
-    const btn = document.getElementById('rbtn');
-    btn.classList.add('loading');
-    document.getElementById('spinner').style.display = 'block';
-    document.getElementById('content').innerHTML = '';
-    document.getElementById('upd').textContent = '';
+export default {
+  async fetch(request) {
+    const url    = new URL(request.url);
+    const action = url.searchParams.get('action') || '';
 
     try {
-      const res = await fetch('/api?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES));
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
+      if (url.pathname !== '/api') return fetch(request);
 
-      document.getElementById('spinner').style.display = 'none';
-      const content = document.getElementById('content');
-      let anyShown = false;
+      if (action === 'delays') {
+        const ids   = url.searchParams.get('ids')   || '';
+        const names = url.searchParams.get('names') || '';
+        if (!ids) return json({ error: 'Brak ids' }, 400);
 
-      STATIONS.forEach(station => {
-        const st = data[station.id];
-        const allTrains = st ? st.trains.filter(t => t.cancelled || isStillRelevant(t.plannedTime, t.delay)) : [];
+        const stationIdList = ids.split(',').map(s => s.trim());
+        const nameList      = names ? names.split('|') : stationIdList;
+        const today         = new Date().toISOString().slice(0, 10);
 
-        if (!allTrains.length) {
-          // Pokaż stację z komunikatem o punktualności
-          anyShown = true;
-          const block = document.createElement('div');
-          block.className = 'station-block';
-          block.innerHTML = \`
-            <div class="station-header">
-              <div class="station-name">\${station.name}</div>
-            </div>
-            <div class="empty-station">🟢 Wszystkie pociągi na stacji punktualnie</div>\`;
-          content.appendChild(block);
-          return;
-        }
-        const trains = allTrains;
-        anyShown = true;
+        // Dwa zapytania równolegle
+        const [opsData, schedData] = await Promise.all([
+          plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'),
+          plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
+        ]);
 
-        const cancelCount = trains.filter(t => t.cancelled).length;
-        const delayCount  = trains.filter(t => !t.cancelled).length;
-        const parts = [];
-        if (cancelCount) parts.push(cancelCount + ' odwołanych');
-        if (delayCount)  parts.push(delayCount  + ' opóźnionych');
+        const trains       = opsData.trains   || [];
+        const routes       = schedData.routes || [];
+        const stNames      = opsData.stations || {};
+        const dict         = schedData.dictionaries || {};
+        const stationNames = dict.stations   || {};
+        const carrierNames = dict.carriers   || {};
+        const catNames     = dict.commercialCategories || {};
 
-        const block = document.createElement('div');
-        block.className = 'station-block';
-        block.innerHTML = `
-          <div class="station-header">
-            <div class="station-name">${st.name}</div>
-            <div class="station-count">${parts.join(' · ')}</div>
-          </div>`;
+        // Mapa orderId -> dane z rozkładu (nazwa, przewoźnik, kategoria)
+        const schedMap = {};
+        routes.forEach(r => { schedMap[r.orderId] = r; });
 
-        trains.forEach(t => {
-          const big  = !t.cancelled && t.delay >= 15;
-          const plan = fmtTime(t.plannedTime);
-          const act  = fmtTime(t.actualTime);
+        const result = {};
+        stationIdList.forEach((stationId, idx) => {
+          const stationName = nameList[idx] || stNames[stationId] || stationId;
+          const delayed = [];
 
-          // Nazwa pociągu: kategoria + numer + nazwa handlowa
-          const trainLabel = [t.catSymbol, t.trainNumber, t.trainName].filter(Boolean).join(' ');
+          trains.forEach(t => {
+            if (t.trainStatus === 'C') return;
+            const allStops = t.stations || [];
+            const stop = allStops.find(s => String(s.stationId) === String(stationId));
+            if (!stop) return;
+            const cancelled = t.trainStatus === 'X';
+            const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
+            if (!cancelled && delay <= 0) return;
 
-          // Relacja skąd → dokąd
-          const relation = t.from && t.to ? t.from + ' → ' + t.to
-                         : t.to            ? '→ ' + t.to
-                         : t.from          ? t.from + ' →' : '';
+            // Dane z rozkładu
+            const r           = schedMap[t.orderId] || {};
+            const carrierCode = r.carrierCode || '';
+            const catSymbol   = r.commercialCategorySymbol || '';
 
-          // Stacje pośrednie (max 5 żeby nie zaśmiecać)
-          const viaStr = t.via && t.via.length
-            ? t.via.slice(0, 5).join(', ') + (t.via.length > 5 ? '…' : '')
-            : '';
+            // Relacja z pełnej trasy (fullRoutes=true)
+            const firstStop = allStops[0];
+            const lastStop  = allStops[allStops.length - 1];
+            const from = firstStop ? (stationNames[firstStop.stationId]?.name || stNames[firstStop.stationId] || '') : '';
+            const to   = lastStop  ? (stationNames[lastStop.stationId]?.name  || stNames[lastStop.stationId]  || '') : '';
 
-          const row = document.createElement('div');
-          row.className = 'train-row' + (t.cancelled ? ' cancel' : big ? ' big' : '');
-          row.innerHTML = `
-            <div class="train-top">
-              <div class="delay${t.cancelled ? ' cancel' : big ? ' big' : ''}">
-                ${t.cancelled ? 'ODWOŁANY' : '+' + t.delay + "'"}
-              </div>
-              <div class="train-info">
-                <div class="train-nm">${trainLabel || '—'}</div>
-                <div class="train-carrier">${t.carrierCode || ''}</div>
-              </div>
-              <div class="train-time">
-                <div class="t-plan${t.cancelled ? ' t-cancel' : ''}">${plan}</div>
-                ${!t.cancelled && act && act !== plan ? `<div class="t-act">${act}</div>` : ''}
-              </div>
-            </div>
-            ${relation || viaStr ? `
-            <div class="train-route">
-              ${relation ? `<div class="relation">${relation}</div>` : ''}
-              ${viaStr   ? `<div class="via-stops">przez: ${viaStr}</div>` : ''}
-              ${t.lastConfirmed && t.lastConfirmed !== t.from && t.lastConfirmed !== t.to ? `<div class="via-stops">📍 ${t.lastConfirmed}</div>` : ''}
-            </div>` : ''}`;
-          block.appendChild(row);
+            // Ostatnia potwierdzona stacja
+            const confirmedStops = allStops.filter(s => s.isConfirmed);
+            const lastConfirmedStop = confirmedStops[confirmedStops.length - 1];
+            const lastConfirmed = lastConfirmedStop
+              ? (stationNames[lastConfirmedStop.stationId]?.name || stNames[lastConfirmedStop.stationId] || '')
+              : '';
+
+            delayed.push({
+              cancelled, delay,
+              trainNumber: r.nationalNumber || t.orderId || '—',
+              trainName:   r.name           || '',
+              category:    catNames[catSymbol]       || catSymbol,
+              catSymbol,
+              carrier:     carrierNames[carrierCode] || carrierCode,
+              carrierCode, from, to, lastConfirmed, via: [],
+              plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
+              actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
+            });
+          });
+
+          delayed.sort((a, b) => (a.plannedTime.slice(0,5) || '99:99').localeCompare(b.plannedTime.slice(0,5) || '99:99'));
+          if (delayed.length > 0) result[stationId] = { name: stationName, trains: delayed };
         });
 
-        content.appendChild(block);
-      });
+        return json(result);
+      }
 
-      if (!anyShown)
-        content.innerHTML = '<div class="empty">🟢 Brak opóźnień i odwołań na wybranych stacjach</div>';
-
-      document.getElementById('upd').textContent =
-        'ostatnia aktualizacja: ' + new Date().toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      return json({ error: 'Unknown action' }, 400);
 
     } catch(e) {
-      document.getElementById('spinner').style.display = 'none';
-      document.getElementById('content').innerHTML = `<div class="err">Błąd: ${e.message}</div>`;
+      return json({ error: e.message }, 500);
     }
-
-    btn.classList.remove('loading');
   }
-
-  load();
-  setInterval(load, 180000);
-</script>
-</body>
-</html>
+};
