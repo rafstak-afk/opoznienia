@@ -27,23 +27,15 @@ export default {
 
         const stationIdList = ids.split(',').map(s => s.trim());
         const nameList      = names ? names.split('|') : stationIdList;
-        const today         = new Date().toISOString().slice(0, 10);
 
-        const [opsData, schedData] = await Promise.all([
-          plkGet('/operations?stations=' + ids + '&withPlanned=true&pageSize=500'),
-          plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
-        ]);
+        // Jedno zapytanie z fullRoutes=true — zawiera pełne trasy i opóźnienia
+        const opsData = await plkGet(
+          '/operations?stations=' + ids +
+          '&withPlanned=true&fullRoutes=true&pageSize=500'
+        );
 
         const trains       = opsData.trains  || [];
-        const routes       = schedData.routes || [];
         const stNames      = opsData.stations || {};
-        const dict         = schedData.dictionaries || {};
-        const stationNames = dict.stations   || {};
-        const carrierNames = dict.carriers   || {};
-        const catNames     = dict.commercialCategories || {};
-
-        const schedMap = {};
-        routes.forEach(r => { schedMap[r.orderId] = r; });
 
         const result = {};
         stationIdList.forEach((stationId, idx) => {
@@ -58,23 +50,22 @@ export default {
             const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
             if (!cancelled && delay <= 0) return;
 
-            const r           = schedMap[t.orderId] || {};
-            const carrierCode = r.carrierCode || '';
-            const catSymbol   = r.commercialCategorySymbol || '';
-            const routeStops  = r.stations || [];
-            const firstId     = routeStops[0]?.stationId;
-            const lastId      = routeStops[routeStops.length - 1]?.stationId;
-            const from = firstId ? (stationNames[firstId]?.name || '') : '';
-            const to   = lastId  ? (stationNames[lastId]?.name  || '') : '';
+            // Pełna trasa z fullRoutes=true
+            const allStops = t.stations || [];
+            const firstStop = allStops[0];
+            const lastStop  = allStops[allStops.length - 1];
+            const from = firstStop ? (stNames[firstStop.stationId] || '') : '';
+            const to   = lastStop  ? (stNames[lastStop.stationId]  || '') : '';
 
             delayed.push({
               cancelled, delay,
-              trainNumber: r.nationalNumber || t.orderId || '—',
-              trainName:   r.name || '',
-              category:    catNames[catSymbol]       || catSymbol,
-              catSymbol,
-              carrier:     carrierNames[carrierCode] || carrierCode,
-              carrierCode, from, to, via: [],
+              trainNumber: t.trainNumber || t.orderId || '—',
+              trainName:   t.trainName   || '',
+              category:    t.commercialCategoryName || t.commercialCategorySymbol || '',
+              catSymbol:   t.commercialCategorySymbol || '',
+              carrier:     t.carrierName || t.carrierCode || '',
+              carrierCode: t.carrierCode || '',
+              from, to, via: [],
               plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
               actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
             });
