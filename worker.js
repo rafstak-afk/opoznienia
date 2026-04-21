@@ -12,13 +12,6 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: CORS });
 }
 
-// Czy to pociąg dalekobieżny wymagający pełnej trasy?
-function isLongDistance(carrierCode, catSymbol) {
-  const icCarriers = ['IC'];
-  const icCats = ['IC', 'IC+', 'ICN', 'EC', 'EC/IC', 'EN/IC', 'EIC', 'EIP', 'TLK', 'Ex', 'IR'];
-  return icCarriers.includes(carrierCode) || icCats.includes(catSymbol);
-}
-
 export default {
   async fetch(request) {
     const url    = new URL(request.url);
@@ -26,17 +19,6 @@ export default {
 
     try {
       if (url.pathname !== '/api') return fetch(request);
-
-      if (action === 'route') {
-        const ids   = url.searchParams.get('ids') || '';
-        const num   = url.searchParams.get('num') || '';
-        const today = new Date().toISOString().slice(0, 10);
-        const sched = await plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500');
-        const found = (sched.routes || []).find(r => r.nationalNumber === num);
-        if (!found) return json({ error: 'Nie znaleziono: ' + num }, 404);
-        const route = await plkGet('/schedules/route/' + found.scheduleId + '/' + found.orderId);
-        return json({ train: found, route });
-      }
 
       if (action === 'delays') {
         const ids   = url.searchParams.get('ids')   || '';
@@ -63,45 +45,6 @@ export default {
         const schedMap = {};
         routes.forEach(r => { schedMap[r.orderId] = r; });
 
-        // Znajdź opóźnione pociągi dalekobieżne wymagające pełnej trasy
-        const longDistanceIds = new Set();
-        trains.forEach(t => {
-          if (t.trainStatus === 'C') return;
-          const r = schedMap[t.orderId] || {};
-          if (!isLongDistance(r.carrierCode || '', r.commercialCategorySymbol || '')) return;
-          stationIdList.forEach(stationId => {
-            const stop = (t.stations || []).find(s => String(s.stationId) === String(stationId));
-            if (!stop) return;
-            const cancelled = t.trainStatus === 'X';
-            const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
-            if (!cancelled && delay <= 0) return;
-            longDistanceIds.add(t.orderId);
-          });
-        });
-
-        // Pobierz pełne trasy tylko dla IC/EC/TLK (max 10)
-        // Użyj scheduleId/orderId z rozkładu (schedMap) a nie z operacji
-        const routeMap = {};
-        const toFetch = [...longDistanceIds].slice(0, 10);
-
-        await Promise.all(toFetch.map(async orderId => {
-          try {
-            const r = schedMap[orderId];
-            if (r && r.scheduleId && r.orderId) {
-              // Użyj danych z rozkładu
-              const data = await plkGet('/schedules/route/' + r.scheduleId + '/' + r.orderId);
-              routeMap[orderId] = data;
-            } else {
-              // Fallback: użyj danych z operacji
-              const t = trains.find(x => x.orderId === orderId);
-              if (t) {
-                const data = await plkGet('/schedules/route/' + t.scheduleId + '/' + t.orderId);
-                routeMap[orderId] = data;
-              }
-            }
-          } catch(e) {}
-        }));
-
         const result = {};
         stationIdList.forEach((stationId, idx) => {
           const stationName = nameList[idx] || stNames[stationId] || stationId;
@@ -118,27 +61,11 @@ export default {
             const r           = schedMap[t.orderId] || {};
             const carrierCode = r.carrierCode || '';
             const catSymbol   = r.commercialCategorySymbol || '';
-
-            let from = '', to = '';
-
-            if (routeMap[t.orderId]) {
-              // Pełna trasa dla IC/EC/TLK
-              const fullStops = routeMap[t.orderId]?.stations || [];
-              const routeDict = routeMap[t.orderId]?.dictionaries?.stations || {};
-              if (fullStops.length > 0) {
-                const firstId = fullStops[0]?.stationId;
-                const lastId  = fullStops[fullStops.length - 1]?.stationId;
-                from = firstId ? (routeDict[firstId]?.name || stationNames[firstId]?.name || '') : '';
-                to   = lastId  ? (routeDict[lastId]?.name  || stationNames[lastId]?.name  || '') : '';
-              }
-            } else {
-              // Lokalna trasa dla KS/PR/etc
-              const routeStops = r.stations || [];
-              const firstId    = routeStops[0]?.stationId;
-              const lastId     = routeStops[routeStops.length - 1]?.stationId;
-              from = firstId ? (stationNames[firstId]?.name || '') : '';
-              to   = lastId  ? (stationNames[lastId]?.name  || '') : '';
-            }
+            const routeStops  = r.stations || [];
+            const firstId     = routeStops[0]?.stationId;
+            const lastId      = routeStops[routeStops.length - 1]?.stationId;
+            const from = firstId ? (stationNames[firstId]?.name || '') : '';
+            const to   = lastId  ? (stationNames[lastId]?.name  || '') : '';
 
             delayed.push({
               cancelled, delay,
@@ -156,20 +83,6 @@ export default {
           delayed.sort((a, b) => (a.plannedTime.slice(0,5) || '99:99').localeCompare(b.plannedTime.slice(0,5) || '99:99'));
           if (delayed.length > 0) result[stationId] = { name: stationName, trains: delayed };
         });
-
-        // Debug info
-        const debug = {};
-        toFetch.forEach(orderId => {
-          const r = schedMap[orderId];
-          debug[orderId] = {
-            inSchedMap: !!r,
-            schedMapOrderId: r?.orderId,
-            schedMapScheduleId: r?.scheduleId,
-            hasRoute: !!routeMap[orderId],
-            routeStations: routeMap[orderId]?.stations?.length || 0
-          };
-        });
-        result._debug = debug;
 
         return json(result);
       }
