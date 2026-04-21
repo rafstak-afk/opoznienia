@@ -20,6 +20,13 @@ export default {
     try {
       if (url.pathname !== '/api') return fetch(request);
 
+      if (action === 'raw') {
+        const ids = url.searchParams.get('ids') || '';
+        const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=1');
+        const t = (data.trains || [])[0] || {};
+        return json({ keys: Object.keys(t), sample: t });
+      }
+
       if (action === 'delays') {
         const ids   = url.searchParams.get('ids')   || '';
         const names = url.searchParams.get('names') || '';
