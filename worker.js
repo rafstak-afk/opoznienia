@@ -20,13 +20,6 @@ export default {
     try {
       if (url.pathname !== '/api') return fetch(request);
 
-      if (action === 'raw') {
-        const ids = url.searchParams.get('ids') || '';
-        const data = await plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=1');
-        const t = (data.trains || [])[0] || {};
-        return json({ keys: Object.keys(t), sample: t });
-      }
-
       if (action === 'delays') {
         const ids   = url.searchParams.get('ids')   || '';
         const names = url.searchParams.get('names') || '';
@@ -34,15 +27,25 @@ export default {
 
         const stationIdList = ids.split(',').map(s => s.trim());
         const nameList      = names ? names.split('|') : stationIdList;
+        const today         = new Date().toISOString().slice(0, 10);
 
-        // Jedno zapytanie z fullRoutes=true — zawiera pełne trasy i opóźnienia
-        const opsData = await plkGet(
-          '/operations?stations=' + ids +
-          '&withPlanned=true&fullRoutes=true&pageSize=500'
-        );
+        // Dwa zapytania równolegle
+        const [opsData, schedData] = await Promise.all([
+          plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'),
+          plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
+        ]);
 
-        const trains       = opsData.trains  || [];
+        const trains       = opsData.trains   || [];
+        const routes       = schedData.routes || [];
         const stNames      = opsData.stations || {};
+        const dict         = schedData.dictionaries || {};
+        const stationNames = dict.stations   || {};
+        const carrierNames = dict.carriers   || {};
+        const catNames     = dict.commercialCategories || {};
+
+        // Mapa orderId -> dane z rozkładu (nazwa, przewoźnik, kategoria)
+        const schedMap = {};
+        routes.forEach(r => { schedMap[r.orderId] = r; });
 
         const result = {};
         stationIdList.forEach((stationId, idx) => {
@@ -51,28 +54,32 @@ export default {
 
           trains.forEach(t => {
             if (t.trainStatus === 'C') return;
-            const stop = (t.stations || []).find(s => String(s.stationId) === String(stationId));
+            const allStops = t.stations || [];
+            const stop = allStops.find(s => String(s.stationId) === String(stationId));
             if (!stop) return;
             const cancelled = t.trainStatus === 'X';
             const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
             if (!cancelled && delay <= 0) return;
 
-            // Pełna trasa z fullRoutes=true
-            const allStops = t.stations || [];
+            // Dane z rozkładu
+            const r           = schedMap[t.orderId] || {};
+            const carrierCode = r.carrierCode || '';
+            const catSymbol   = r.commercialCategorySymbol || '';
+
+            // Relacja z pełnej trasy (fullRoutes=true)
             const firstStop = allStops[0];
             const lastStop  = allStops[allStops.length - 1];
-            const from = firstStop ? (stNames[firstStop.stationId] || '') : '';
-            const to   = lastStop  ? (stNames[lastStop.stationId]  || '') : '';
+            const from = firstStop ? (stationNames[firstStop.stationId]?.name || stNames[firstStop.stationId] || '') : '';
+            const to   = lastStop  ? (stationNames[lastStop.stationId]?.name  || stNames[lastStop.stationId]  || '') : '';
 
             delayed.push({
               cancelled, delay,
-              trainNumber: t.trainNumber || t.orderId || '—',
-              trainName:   t.trainName   || '',
-              category:    t.commercialCategoryName || t.commercialCategorySymbol || '',
-              catSymbol:   t.commercialCategorySymbol || '',
-              carrier:     t.carrierName || t.carrierCode || '',
-              carrierCode: t.carrierCode || '',
-              from, to, via: [],
+              trainNumber: r.nationalNumber || t.orderId || '—',
+              trainName:   r.name           || '',
+              category:    catNames[catSymbol]       || catSymbol,
+              catSymbol,
+              carrier:     carrierNames[carrierCode] || carrierCode,
+              carrierCode, from, to, via: [],
               plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
               actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
             });
