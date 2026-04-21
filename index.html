@@ -140,8 +140,10 @@
       const [h, m] = plannedTime.slice(0, 5).split(':').map(Number);
       const plannedMin = h * 60 + m;
       const actualMin  = plannedMin + (delay || 0);
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
+      // Użyj czasu polskiego niezależnie od ustawień telefonu
+      const nowStr = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour12: false });
+      const [nh, nm] = nowStr.slice(0, 5).split(':').map(Number);
+      const nowMin = nh * 60 + nm;
       return nowMin < actualMin + 10;
     } catch { return true; }
   }
@@ -167,7 +169,7 @@
         if (!st || !st.trains.length) return;
 
         // Filtruj stare pociągi po stronie przeglądarki
-        const trains = st.trains;
+        const trains = st.trains.filter(t => t.cancelled || isStillRelevant(t.plannedTime, t.delay));
         if (!trains.length) return;
         anyShown = true;
 
