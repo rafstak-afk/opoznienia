@@ -88,6 +88,7 @@
     .train-route .relation { color: var(--text); font-weight: 500; }
     .train-route .via-stops { color: var(--text3); margin-top: 1px; }
 
+    .empty-station { font-size: 12px; color: var(--text3); font-family: var(--mono); padding: 0.5rem 0 0.25rem; }
     .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
     .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
     .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
@@ -166,11 +167,22 @@
 
       STATIONS.forEach(station => {
         const st = data[station.id];
-        if (!st || !st.trains.length) return;
+        const allTrains = st ? st.trains.filter(t => t.cancelled || isStillRelevant(t.plannedTime, t.delay)) : [];
 
-        // Filtruj stare pociągi po stronie przeglądarki
-        const trains = st.trains.filter(t => t.cancelled || isStillRelevant(t.plannedTime, t.delay));
-        if (!trains.length) return;
+        if (!allTrains.length) {
+          // Pokaż stację z komunikatem o punktualności
+          anyShown = true;
+          const block = document.createElement('div');
+          block.className = 'station-block';
+          block.innerHTML = \`
+            <div class="station-header">
+              <div class="station-name">\${station.name}</div>
+            </div>
+            <div class="empty-station">🟢 Wszystkie pociągi na stacji punktualnie</div>\`;
+          content.appendChild(block);
+          return;
+        }
+        const trains = allTrains;
         anyShown = true;
 
         const cancelCount = trains.filter(t => t.cancelled).length;
@@ -225,6 +237,7 @@
             <div class="train-route">
               ${relation ? `<div class="relation">${relation}</div>` : ''}
               ${viaStr   ? `<div class="via-stops">przez: ${viaStr}</div>` : ''}
+              ${t.lastConfirmed && t.lastConfirmed !== t.from && t.lastConfirmed !== t.to ? `<div class="via-stops">📍 ${t.lastConfirmed}</div>` : ''}
             </div>` : ''}`;
           block.appendChild(row);
         });
