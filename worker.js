@@ -58,6 +58,9 @@ export default {
             const cancelled = t.trainStatus === 'X';
             const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
             if (!cancelled && delay <= 0) return;
+            // Odrzuć rekordy z poprzednich dni
+            const actualTime = stop.actualDeparture || stop.actualArrival || '';
+            if (actualTime && actualTime.slice(0, 10) < today) return;
 
             const r           = schedMap[t.orderId] || {};
             const carrierCode = r.carrierCode || '';
