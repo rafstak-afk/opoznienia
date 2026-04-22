@@ -59,10 +59,9 @@ export default {
             if (!stop) return;
             const cancelled = t.trainStatus === 'X';
             const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
+            const r           = schedMap[t.orderId] || {};
             const isTracked = trackedNums.includes(String(r.nationalNumber || ''));
             if (!cancelled && delay <= 0 && !isTracked) return;
-
-            const r           = schedMap[t.orderId] || {};
             const carrierCode = r.carrierCode || '';
             const catSymbol   = r.commercialCategorySymbol || '';
 
