@@ -170,7 +170,9 @@
     document.getElementById('upd').textContent = '';
 
     try {
-      const res = await fetch('/api?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES));
+      const tracked = getTracked();
+      const trackedNums = tracked.map(t => t.number).join(',');
+      const res = await fetch('/api?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES) + (trackedNums ? '&tracked=' + encodeURIComponent(trackedNums) : ''));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
 
@@ -181,16 +183,13 @@
       STATIONS.forEach(station => {
         const st = data[station.id];
 
-        const tracked = getTracked();
         const trains = (st ? st.trains : []).filter(t => {
           if (t.cancelled) return true;
           const num = String(t.trainNumber);
           if (num.length > 8 && !t.trainName && !t.catSymbol) return false;
-          // Śledzone pociągi też pokazuj (z filtrem czasowym)
+          // Śledzone pociągi pokazuj nawet punktualne
           const isTracked = tracked.some(tr => String(tr.number) === String(t.trainNumber));
-          if (isTracked) return isStillRelevant(t.plannedTime, t.delay, t.actualTime);
-          // Pozostałe — tylko opóźnione
-          if (t.delay <= 0) return false;
+          if (!isTracked && t.delay <= 0) return false;
           return isStillRelevant(t.plannedTime, t.delay, t.actualTime);
         });
         anyShown = true;
