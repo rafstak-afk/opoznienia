@@ -127,12 +127,16 @@
   function isStillRelevant(plannedTime, delay, actualTime) {
     if (!plannedTime) return true;
     try {
-      // Jeśli actualTime zawiera datę — sprawdź czy to dzisiaj lub przyszłość
+      const todayWarsaw = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+      // Jeśli actualTime jest z poprzedniego dnia — usuń tylko gdy plannedTime też już minęło
       if (actualTime && actualTime.includes('T')) {
-        const todayWarsaw = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
         const actualDate = actualTime.slice(0, 10);
-        if (actualDate < todayWarsaw) return false; // wczoraj lub starsze — usuń
+        if (actualDate < todayWarsaw) {
+          // Stary rekord — usuń bezwarunkowo
+          return false;
+        }
       }
+      // Sprawdź czy godzina już minęła
       const [h, m] = plannedTime.slice(0, 5).split(':').map(Number);
       const plannedMin = h * 60 + m;
       const actualMin  = plannedMin + (delay || 0);
