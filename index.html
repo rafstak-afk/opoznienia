@@ -124,9 +124,15 @@
     } catch { return val; }
   }
 
-  function isStillRelevant(plannedTime, delay) {
+  function isStillRelevant(plannedTime, delay, actualTime) {
     if (!plannedTime) return true;
     try {
+      // Jeśli actualTime zawiera datę — sprawdź czy to dzisiaj lub przyszłość
+      if (actualTime && actualTime.includes('T')) {
+        const todayWarsaw = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+        const actualDate = actualTime.slice(0, 10);
+        if (actualDate < todayWarsaw) return false; // wczoraj lub starsze — usuń
+      }
       const [h, m] = plannedTime.slice(0, 5).split(':').map(Number);
       const plannedMin = h * 60 + m;
       const actualMin  = plannedMin + (delay || 0);
@@ -161,7 +167,7 @@
           if (t.cancelled) return true;
           const num = String(t.trainNumber);
           if (num.length > 8 && !t.trainName && !t.catSymbol) return false;
-          return isStillRelevant(t.plannedTime, t.delay);
+          return isStillRelevant(t.plannedTime, t.delay, t.actualTime);
         });
         if (!trains.length) return;
         anyShown = true;
