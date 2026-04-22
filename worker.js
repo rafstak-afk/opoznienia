@@ -27,7 +27,7 @@ export default {
 
         const stationIdList = ids.split(',').map(s => s.trim());
         const nameList      = names ? names.split('|') : stationIdList;
-        const today         = new Date().toISOString().slice(0, 10);
+        const today         = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
 
         const [opsData, schedData] = await Promise.all([
           plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500&operatingDate=' + today),
