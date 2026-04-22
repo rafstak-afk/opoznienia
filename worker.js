@@ -29,7 +29,6 @@ export default {
         const nameList      = names ? names.split('|') : stationIdList;
         const today         = new Date().toISOString().slice(0, 10);
 
-        // Dwa zapytania równolegle
         const [opsData, schedData] = await Promise.all([
           plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'),
           plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
@@ -43,7 +42,6 @@ export default {
         const carrierNames = dict.carriers   || {};
         const catNames     = dict.commercialCategories || {};
 
-        // Mapa orderId -> dane z rozkładu (nazwa, przewoźnik, kategoria)
         const schedMap = {};
         routes.forEach(r => { schedMap[r.orderId] = r; });
 
@@ -61,23 +59,14 @@ export default {
             const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
             if (!cancelled && delay <= 0) return;
 
-            // Dane z rozkładu
             const r           = schedMap[t.orderId] || {};
             const carrierCode = r.carrierCode || '';
             const catSymbol   = r.commercialCategorySymbol || '';
 
-            // Relacja z pełnej trasy (fullRoutes=true)
             const firstStop = allStops[0];
             const lastStop  = allStops[allStops.length - 1];
             const from = firstStop ? (stationNames[firstStop.stationId]?.name || stNames[firstStop.stationId] || '') : '';
             const to   = lastStop  ? (stationNames[lastStop.stationId]?.name  || stNames[lastStop.stationId]  || '') : '';
-
-            // Ostatnia potwierdzona stacja
-            const confirmedStops = allStops.filter(s => s.isConfirmed);
-            const lastConfirmedStop = confirmedStops[confirmedStops.length - 1];
-            const lastConfirmed = lastConfirmedStop
-              ? (stationNames[lastConfirmedStop.stationId]?.name || stNames[lastConfirmedStop.stationId] || '')
-              : '';
 
             delayed.push({
               cancelled, delay,
@@ -86,7 +75,7 @@ export default {
               category:    catNames[catSymbol]       || catSymbol,
               catSymbol,
               carrier:     carrierNames[carrierCode] || carrierCode,
-              carrierCode, from, to, lastConfirmed, via: [],
+              carrierCode, from, to, via: [],
               plannedTime: stop.plannedDeparture || stop.plannedArrival || '',
               actualTime:  stop.actualDeparture  || stop.actualArrival  || '',
             });
