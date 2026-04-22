@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Śledzone pociągi">
+  <title>Śledzone pociągi</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f7f5f0; --surface: #ffffff;
+      --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.14);
+      --text: #1a1a18; --text2: #6b6b66; --text3: #a0a09a;
+      --green: #2e7d32; --green-bg: #e8f8e8; --green-border: #4caf50;
+      --red: #c0392b;
+      --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+    header {
+      padding: 2.5rem 1.25rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem;
+      position: sticky; top: 0; background: var(--bg); z-index: 10;
+    }
+    .header-left h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+    .header-left p  { font-size: 12px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+    .back-btn {
+      background: var(--surface); border: 1px solid var(--border2); border-radius: 8px;
+      color: var(--text); font-family: var(--sans); font-size: 13px;
+      padding: 0.5rem 0.875rem; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .container { padding: 1.5rem 1rem 2rem; max-width: 700px; margin: 0 auto; }
+    .add-box {
+      background: var(--surface); border: 1px solid var(--border2); border-radius: 12px;
+      padding: 1rem; margin-bottom: 1.5rem;
+      display: flex; gap: 8px; align-items: center;
+    }
+    .add-box input {
+      flex: 1; border: 1px solid var(--border2); border-radius: 8px;
+      padding: 0.5rem 0.75rem; font-family: var(--mono); font-size: 14px;
+      background: var(--bg); color: var(--text); outline: none;
+    }
+    .add-box input:focus { border-color: var(--green); }
+    .add-btn {
+      background: var(--green); color: white; border: none; border-radius: 8px;
+      padding: 0.5rem 1rem; font-family: var(--sans); font-size: 13px;
+      font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .empty-list { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
+    .train-item {
+      background: var(--green-bg); border: 1px solid var(--green-border); border-radius: 10px;
+      padding: 0.75rem 0.875rem; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .train-item-info { font-size: 14px; font-weight: 600; }
+    .train-item-num  { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-top: 2px; }
+    .del-btn {
+      background: none; border: 1px solid rgba(192,57,43,0.3); border-radius: 6px;
+      color: var(--red); font-size: 13px; padding: 0.3rem 0.6rem;
+      cursor: pointer; font-family: var(--sans);
+    }
+    .section-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase;
+      letter-spacing: 0.07em; font-family: var(--mono); margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <h1>Śledzone pociągi</h1>
+    <p>wyróżnione na tablicy opóźnień</p>
+  </div>
+  <button class="back-btn" onclick="location.href='/'">
+    ← Powrót
+  </button>
+</header>
+<div class="container">
+  <div class="add-box">
+    <input type="text" id="numInput" placeholder="Numer pociągu, np. 3814" maxlength="10"
+      onkeydown="if(event.key==='Enter') addTrain()">
+    <button class="add-btn" onclick="addTrain()">+ Dodaj</button>
+  </div>
+  <div class="section-title">Śledzone pociągi</div>
+  <div id="list"></div>
+</div>
+<script>
+  function getTracked() {
+    try { return JSON.parse(localStorage.getItem('tracked') || '[]'); }
+    catch { return []; }
+  }
+
+  function saveTracked(list) {
+    localStorage.setItem('tracked', JSON.stringify(list));
+  }
+
+  function render() {
+    const list = getTracked();
+    const el = document.getElementById('list');
+    if (!list.length) {
+      el.innerHTML = '<div class="empty-list">Brak śledzonych pociągów.<br>Dodaj numer pociągu powyżej.</div>';
+      return;
+    }
+    el.innerHTML = list.map((t, i) => `
+      <div class="train-item">
+        <div>
+          <div class="train-item-info">${t.name || t.number}</div>
+          <div class="train-item-num">nr ${t.number}</div>
+        </div>
+        <button class="del-btn" onclick="removeTrain(${i})">Usuń</button>
+      </div>`).join('');
+  }
+
+  function addTrain() {
+    const input = document.getElementById('numInput');
+    const num = input.value.trim();
+    if (!num) return;
+    const list = getTracked();
+    if (list.some(t => t.number === num)) {
+      input.value = '';
+      return;
+    }
+    list.push({ number: num, name: '' });
+    saveTracked(list);
+    input.value = '';
+    render();
+  }
+
+  function removeTrain(idx) {
+    const list = getTracked();
+    list.splice(idx, 1);
+    saveTracked(list);
+    render();
+  }
+
+  render();
+</script>
+</body>
+</html>
