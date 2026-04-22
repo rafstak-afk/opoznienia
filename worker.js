@@ -30,7 +30,7 @@ export default {
         const today         = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
 
         const [opsData, schedData] = await Promise.all([
-          plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500&operatingDate=' + today),
+          plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'),
           plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
         ]);
 
