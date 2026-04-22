@@ -28,6 +28,8 @@ export default {
         const stationIdList = ids.split(',').map(s => s.trim());
         const nameList      = names ? names.split('|') : stationIdList;
         const today         = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+        const trackedParam  = url.searchParams.get('tracked') || '';
+        const trackedNums   = trackedParam ? trackedParam.split(',').map(s => s.trim()) : [];
 
         const [opsData, schedData] = await Promise.all([
           plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'),
@@ -57,7 +59,8 @@ export default {
             if (!stop) return;
             const cancelled = t.trainStatus === 'X';
             const delay = Math.max(stop.departureDelayMinutes || 0, stop.arrivalDelayMinutes || 0);
-            if (!cancelled && delay <= 0) return;
+            const isTracked = trackedNums.includes(String(r.nationalNumber || ''));
+            if (!cancelled && delay <= 0 && !isTracked) return;
 
             const r           = schedMap[t.orderId] || {};
             const carrierCode = r.carrierCode || '';
