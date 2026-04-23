@@ -203,9 +203,16 @@ export default {
           }
         }
         
-        // Sortuj po czasie odjazdu
+        // Sortuj po czasie odjazdu i usuń duplikaty (same linia+kierunek+minuta)
         for (const sid of Object.keys(stopDeps)) {
           stopDeps[sid].sort((a, b) => a.actual - b.actual);
+          const seen = new Set();
+          stopDeps[sid] = stopDeps[sid].filter(d => {
+            const key = d.line + '|' + d.headsign + '|' + d.actual;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
         }
         
         return json({ stops: stopDeps, nowMin, updated: warsawTime.slice(0,5) });
