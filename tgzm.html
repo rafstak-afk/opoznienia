@@ -13,7 +13,7 @@
       --bg: #f7f5f0; --surface: #ffffff;
       --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.14);
       --text: #1a1a18; --text2: #6b6b66; --text3: #a0a09a;
-      --accent: #b8860b; --red: #c0392b;
+      --accent: #b8860b; --red: #c0392b; --green: #2e7d32;
       --tgzm: #f5c000; --tgzm-dark: #1a1a18;
       --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
     }
@@ -57,11 +57,12 @@
       text-align: center; white-space: nowrap;
     }
     .dep-direction { font-size: 13px; font-weight: 500; }
-    .dep-minutes {
-      font-family: var(--mono); font-size: 15px; font-weight: 500;
-      color: var(--accent); text-align: right; white-space: nowrap;
-    }
-    .dep-minutes.soon { color: var(--red); }
+    .dep-time { text-align: right; }
+    .dep-plan { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+    .dep-delay { font-family: var(--mono); font-size: 11px; color: var(--red); margin-top: 1px; }
+    .dep-soon { font-family: var(--mono); font-size: 13px; color: var(--red); font-weight: 500; }
+    .dep-ok   { font-family: var(--mono); font-size: 13px; color: var(--green); }
+    .empty-stop { font-size: 12px; color: var(--text3); font-family: var(--mono); padding: 0.25rem 0 0.5rem; }
     .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
     .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
     .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
@@ -72,7 +73,7 @@
 <header>
   <div class="header-left">
     <h1>Transport GZM</h1>
-    <p>Tarnowskie Góry · rzeczywiste odjazdy</p>
+    <p>Tarnowskie Góry · odjazdy real-time</p>
   </div>
   <div style="display:flex;gap:8px;flex-shrink:0;">
     <button class="btn" onclick="location.href='/'">← Powrót</button>
@@ -93,18 +94,10 @@
     { id: 3629, name: 'Sienkiewicza',         note: '' },
   ];
 
-  function parseSDIP(html, stopId) {
-    const departures = [];
-    const rows = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
-    for (const row of rows) {
-      const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [])
-        .map(td => td.replace(/<[^>]+>/g, '').trim())
-        .filter(Boolean);
-      if (cells.length >= 3) departures.push({ line: cells[0], direction: cells[1], minutes: cells[2] });
-    }
-    const m = html.match(/Aktualizacja danych:\s*([^
-<]+)/);
-    return { stopId, updated: m ? m[1].trim() : '', departures };
+  function fmtDiff(diff) {
+    if (diff <= 0) return '<span class="dep-soon">odjeżdża</span>';
+    if (diff <= 5) return `<span class="dep-soon">${diff} min</span>`;
+    return `<span class="dep-ok">${diff} min</span>`;
   }
 
   async function load() {
@@ -115,22 +108,15 @@
     document.getElementById('upd').textContent = '';
 
     try {
-      const results = await Promise.all(
-        STOPS.map(s => 
-          fetch('/api?action=sdip&stop=' + s.id)
-            .then(r => r.json())
-            .catch(e => ({ stopId: s.id, updated: '', departures: [], error: e.message }))
-        )
-      );
+      const res = await fetch('/api?action=tgzm');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
 
       document.getElementById('spinner').style.display = 'none';
       const content = document.getElementById('content');
-      let anyShown = false;
 
-      STOPS.forEach((stop, idx) => {
-        const data = results[idx];
-        const deps = data.departures || [];
-
+      STOPS.forEach(stop => {
+        const deps = (data.stops || {})[stop.id] || [];
         const block = document.createElement('div');
         block.className = 'stop-block';
 
@@ -138,31 +124,34 @@
         block.innerHTML = `
           <div class="stop-header">
             <a class="stop-name" href="${stopUrl}" target="_blank">Tarnowskie Góry ${stop.name}</a>
-            <div class="stop-meta">${stop.note}${data.updated ? ' · ' + data.updated : ''}</div>
+            <div class="stop-meta">${stop.note}</div>
           </div>`;
 
         if (!deps.length) {
-          block.innerHTML += `<div class="empty">Brak danych o odjazdach</div>`;
+          block.innerHTML += `<div class="empty-stop">🟢 Brak nadchodzących odjazdów</div>`;
         } else {
-          anyShown = true;
-          deps.forEach(d => {
-            const mins = parseInt(d.minutes) || 0;
-            const soon = mins <= 5;
+          deps.slice(0, 8).forEach(d => {
             const row = document.createElement('div');
             row.className = 'dep-row';
+            const delayHtml = d.delay > 0
+              ? `<div class="dep-delay">+${d.delay}'</div>`
+              : d.delay < 0 ? `<div class="dep-delay" style="color:var(--green)">${d.delay}'</div>` : '';
             row.innerHTML = `
               <div class="line-badge">${d.line}</div>
-              <div class="dep-direction">${d.direction}</div>
-              <div class="dep-minutes${soon ? ' soon' : ''}">${d.minutes}</div>`;
+              <div class="dep-direction">${d.headsign}</div>
+              <div class="dep-time">
+                <div class="dep-plan">${d.planned}</div>
+                ${delayHtml}
+              </div>`;
             block.appendChild(row);
           });
         }
-
         content.appendChild(block);
       });
 
       document.getElementById('upd').textContent =
-        'ostatnia aktualizacja: ' + new Date().toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        'ostatnia aktualizacja: ' + new Date().toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit', second:'2-digit'})
+        + (data.updated ? ' · dane GTFS-RT: ' + data.updated : '');
 
     } catch(e) {
       document.getElementById('spinner').style.display = 'none';
@@ -173,7 +162,7 @@
   }
 
   load();
-  setInterval(load, 60000);
+  setInterval(load, 30000);
 </script>
 </body>
 </html>
