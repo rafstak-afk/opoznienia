@@ -35,6 +35,11 @@
       -webkit-tap-highlight-color: transparent;
     }
     .spin { display: inline-block; }
+    .toggles-bar {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+      padding: 0.6rem 1.25rem; border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
     .toggle-wrap { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); font-family:var(--sans); flex-shrink:0; }
     .toggle { position:relative; width:40px; height:22px; flex-shrink:0; }
     .toggle input { opacity:0; width:0; height:0; }
@@ -109,28 +114,30 @@
 <header>
   <div class="header-left">
     <h1>Opóźnienia pociągów</h1>
-    <p>dane real-time · PLK API</p>
+    <p>dane real-time · PLK API · <span id='limit-info'>limit: …</span></p>
   </div>
-  <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-    <label class="toggle-wrap">
-      <span id="toggle-label">Śledzone: wł</span>
-      <label class="toggle">
-        <input type="checkbox" id="tracked-toggle" checked onchange="onToggle()">
-        <span class="toggle-slider"></span>
-      </label>
-    </label>
-    <label class="toggle-wrap">
-      <span id="small-label">Małe opóźnienia: wł</span>
-      <label class="toggle">
-        <input type="checkbox" id="small-toggle" checked onchange="onSmallToggle()">
-        <span class="toggle-slider"></span>
-      </label>
-    </label>
+  <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;">
     <button class="refresh-btn" onclick="location.href='sledzone.html'">★ Śledzone</button>
-    <button class="refresh-btn" onclick="location.href='moje.html'">★ Monitoring</button>
+    <button class="refresh-btn" onclick="location.href='moje.html'">★ Monitor</button>
     <button class="refresh-btn" id="rbtn" onclick="load()"><span class="spin">↻</span> Odśwież</button>
   </div>
 </header>
+<div class="toggles-bar">
+  <label class="toggle-wrap">
+    <span id="toggle-label">Śledzone: wł</span>
+    <label class="toggle">
+      <input type="checkbox" id="tracked-toggle" checked onchange="onToggle()">
+      <span class="toggle-slider"></span>
+    </label>
+  </label>
+  <label class="toggle-wrap">
+    <span id="small-label">Małe opóźnienia: wł</span>
+    <label class="toggle">
+      <input type="checkbox" id="small-toggle" checked onchange="onSmallToggle()">
+      <span class="toggle-slider"></span>
+    </label>
+  </label>
+</div>
 <div class="container">
   <div id="spinner">Pobieram dane…</div>
   <div id="content"></div>
@@ -223,7 +230,16 @@
     try {
       const tracked = getTracked();
       const trackedNums = tracked.map(t => t.number).join(',');
-      const res = await fetch('/api?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES) + (trackedNums ? '&tracked=' + encodeURIComponent(trackedNums) : ''));
+      const [res, limitRes] = await Promise.all([
+        fetch('/api?action=delays&ids=' + IDS + '&names=' + encodeURIComponent(NAMES) + (trackedNums ? '&tracked=' + encodeURIComponent(trackedNums) : '')),
+        fetch('/api?action=limit')
+      ]);
+      // Aktualizuj info o limicie
+      try {
+        const ldata = await limitRes.json();
+        document.getElementById('limit-info').textContent =
+          'dzienny: ' + ldata.daily_remaining + '/' + ldata.daily_limit;
+      } catch(e) {}
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
 
