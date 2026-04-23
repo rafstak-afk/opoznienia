@@ -93,6 +93,20 @@
     { id: 3629, name: 'Sienkiewicza',         note: '' },
   ];
 
+  function parseSDIP(html, stopId) {
+    const departures = [];
+    const rows = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
+    for (const row of rows) {
+      const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [])
+        .map(td => td.replace(/<[^>]+>/g, '').trim())
+        .filter(Boolean);
+      if (cells.length >= 3) departures.push({ line: cells[0], direction: cells[1], minutes: cells[2] });
+    }
+    const m = html.match(/Aktualizacja danych:\s*([^
+<]+)/);
+    return { stopId, updated: m ? m[1].trim() : '', departures };
+  }
+
   async function load() {
     const btn = document.getElementById('rbtn');
     btn.classList.add('loading');
@@ -103,8 +117,15 @@
     try {
       const results = await Promise.all(
         STOPS.map(s => 
-          fetch('https://merry-cascaron-1a45ab.netlify.app/.netlify/functions/plk?action=sdip&stop=' + s.id)
-            .then(r => r.json())
+          fetch('https://rj.transportgzm.pl/api/-/sdip/table/' + s.id + '/v2/', {
+            headers: {
+              'HX-Request': 'true',
+              'HX-Target': 'sdip-time-table-' + s.id,
+              'HX-Current-URL': 'https://rj.transportgzm.pl/v2/rozklady/przystanek/stop/' + s.id + '/',
+            }
+          })
+            .then(r => r.text())
+            .then(html => parseSDIP(html, s.id))
             .catch(e => ({ stopId: s.id, updated: '', departures: [], error: e.message }))
         )
       );
