@@ -101,6 +101,8 @@
     .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
     .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
     #spinner { text-align: center; padding: 3rem 1rem; color: var(--text3); font-family: var(--mono); font-size: 13px; }
+    .station-link { text-decoration: none; color: inherit; }
+    .station-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -114,6 +116,13 @@
       <span id="toggle-label">Śledzone: wł</span>
       <label class="toggle">
         <input type="checkbox" id="tracked-toggle" checked onchange="onToggle()">
+        <span class="toggle-slider"></span>
+      </label>
+    </label>
+    <label class="toggle-wrap">
+      <span id="small-label">Małe opóźnienia: wł</span>
+      <label class="toggle">
+        <input type="checkbox" id="small-toggle" checked onchange="onSmallToggle()">
         <span class="toggle-slider"></span>
       </label>
     </label>
@@ -146,6 +155,18 @@
   function getTracked() {
     try { return JSON.parse(localStorage.getItem('tracked') || '[]'); }
     catch { return []; }
+  }
+
+  function getShowSmall() {
+    try { return localStorage.getItem('showSmall') !== 'false'; }
+    catch { return true; }
+  }
+
+  function onSmallToggle() {
+    const cb = document.getElementById('small-toggle');
+    localStorage.setItem('showSmall', cb.checked ? 'true' : 'false');
+    document.getElementById('small-label').textContent = cb.checked ? 'Małe opóźnienia: wł' : 'Małe opóźnienia: wył';
+    load();
   }
 
   function getShowTracked() {
@@ -221,6 +242,8 @@
           const showTracked = getShowTracked();
           const isTracked = showTracked && tracked.some(tr => String(tr.number) === String(t.trainNumber));
           if (!isTracked && t.delay <= 0) return false;
+          // Ukryj małe opóźnienia (<5 min) jeśli wyłączone — ale odwołane zawsze pokazuj
+          if (!t.cancelled && !isTracked && t.delay > 0 && t.delay < 5 && !getShowSmall()) return false;
           return isStillRelevant(t.plannedTime, t.delay, t.actualTime);
         });
         anyShown = true;
@@ -229,7 +252,7 @@
           block.className = 'station-block';
           block.innerHTML = `
             <div class="station-header">
-              <div class="station-name">${station.name}</div>
+              <div class="station-name"><a class="station-link" href="https://l.plk-sa.pl/${station.id}" target="_blank">${station.name}</a></div>
             </div>
             <div style="font-size:12px;color:var(--text3);font-family:var(--mono);padding:0.25rem 0 0.5rem;">🟢 Wszystkie pociągi na stacji punktualnie</div>`;
           content.appendChild(block);
@@ -246,7 +269,7 @@
         block.className = 'station-block';
         block.innerHTML = `
           <div class="station-header">
-            <div class="station-name">${st.name}</div>
+            <div class="station-name"><a class="station-link" href="https://l.plk-sa.pl/${station.id}" target="_blank">${st.name}</a></div>
             <div class="station-count">${parts.join(' · ')}</div>
           </div>`;
 
@@ -301,6 +324,11 @@
   }
 
   // Inicjuj stan przełącznika
+  const _scb = document.getElementById('small-toggle');
+  const _sshow = getShowSmall();
+  _scb.checked = _sshow;
+  document.getElementById('small-label').textContent = _sshow ? 'Małe opóźnienia: wł' : 'Małe opóźnienia: wył';
+
   const _cb = document.getElementById('tracked-toggle');
   const _show = getShowTracked();
   _cb.checked = _show;
