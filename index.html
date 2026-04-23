@@ -15,7 +15,7 @@
       --bg: #f7f5f0; --surface: #ffffff;
       --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.14);
       --text: #1a1a18; --text2: #6b6b66; --text3: #a0a09a;
-      --accent: #b8860b; --red: #c0392b;
+      --accent: #b8860b; --red: #c0392b; --green-border: #4caf50;
       --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
     }
     body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
@@ -35,6 +35,19 @@
       -webkit-tap-highlight-color: transparent;
     }
     .spin { display: inline-block; }
+    .toggle-wrap { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text2); font-family:var(--mono); flex-shrink:0; }
+    .toggle { position:relative; width:40px; height:22px; flex-shrink:0; }
+    .toggle input { opacity:0; width:0; height:0; }
+    .toggle-slider {
+      position:absolute; inset:0; background:var(--border2); border-radius:22px;
+      cursor:pointer; transition:background 0.2s;
+    }
+    .toggle-slider:before {
+      content:''; position:absolute; width:16px; height:16px; left:3px; top:3px;
+      background:#fff; border-radius:50%; transition:transform 0.2s;
+    }
+    .toggle input:checked + .toggle-slider { background:var(--green-border, #4caf50); }
+    .toggle input:checked + .toggle-slider:before { transform:translateX(18px); }
     .loading .spin { animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .container { padding: 0 1rem 2rem; max-width: 700px; margin: 0 auto; }
@@ -96,7 +109,14 @@
     <h1>Opóźnienia pociągów</h1>
     <p>dane real-time · PLK API</p>
   </div>
-  <div style="display:flex;gap:8px;flex-shrink:0;">
+  <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+    <label class="toggle-wrap">
+      <span id="toggle-label">Śledzone: wł</span>
+      <label class="toggle">
+        <input type="checkbox" id="tracked-toggle" checked onchange="onToggle()">
+        <span class="toggle-slider"></span>
+      </label>
+    </label>
     <button class="refresh-btn" onclick="location.href='sledzone.html'">★ Śledzone</button>
     <button class="refresh-btn" onclick="location.href='moje.html'">★ Monitoring</button>
     <button class="refresh-btn" id="rbtn" onclick="load()"><span class="spin">↻</span> Odśwież</button>
@@ -126,6 +146,18 @@
   function getTracked() {
     try { return JSON.parse(localStorage.getItem('tracked') || '[]'); }
     catch { return []; }
+  }
+
+  function getShowTracked() {
+    try { return localStorage.getItem('showTracked') !== 'false'; }
+    catch { return true; }
+  }
+
+  function onToggle() {
+    const cb = document.getElementById('tracked-toggle');
+    localStorage.setItem('showTracked', cb.checked ? 'true' : 'false');
+    document.getElementById('toggle-label').textContent = cb.checked ? 'Śledzone: wł' : 'Śledzone: wył';
+    load();
   }
 
   function fmtTime(val) {
@@ -185,8 +217,9 @@
           if (t.cancelled) return true;
           const num = String(t.trainNumber);
           if (num.length > 8 && !t.trainName && !t.catSymbol) return false;
-          // Śledzone pociągi pokazuj nawet punktualne
-          const isTracked = tracked.some(tr => String(tr.number) === String(t.trainNumber));
+          // Śledzone pociągi pokazuj nawet punktualne (jeśli włączone)
+          const showTracked = getShowTracked();
+          const isTracked = showTracked && tracked.some(tr => String(tr.number) === String(t.trainNumber));
           if (!isTracked && t.delay <= 0) return false;
           return isStillRelevant(t.plannedTime, t.delay, t.actualTime);
         });
@@ -228,7 +261,7 @@
                          : t.to ? '→ ' + t.to : t.from ? t.from + ' →' : '';
 
           const row = document.createElement('div');
-          row.className = 'train-row' + (t.cancelled ? ' cancel' : isTracked ? ' tracked' : big ? ' big' : '');
+          row.className = 'train-row' + (t.cancelled ? ' cancel' : (isTracked && getShowTracked()) ? ' tracked' : big ? ' big' : '');
           row.innerHTML = `
             <div class="train-top">
               <div class="delay${t.cancelled ? ' cancel' : big ? ' big' : ''}">
@@ -266,6 +299,12 @@
 
     btn.classList.remove('loading');
   }
+
+  // Inicjuj stan przełącznika
+  const _cb = document.getElementById('tracked-toggle');
+  const _show = getShowTracked();
+  _cb.checked = _show;
+  document.getElementById('toggle-label').textContent = _show ? 'Śledzone: wł' : 'Śledzone: wył';
 
   load();
   setInterval(load, 180000);
