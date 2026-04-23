@@ -51,7 +51,6 @@
       display: grid; grid-template-columns: 52px 1fr auto; gap: 0 12px; align-items: center;
     }
     .line-badge {
-      background: var(--tgzm); color: var(--tgzm-dark);
       font-family: var(--mono); font-size: 13px; font-weight: 500;
       border-radius: 6px; padding: 0.2rem 0.4rem;
       text-align: center; white-space: nowrap;
@@ -165,7 +164,32 @@
     }
   });
 
-    async function load() {
+    function lineBadgeStyle(line) {
+    // Kolory dla konkretnych linii
+    const colors = {
+      '3':   ['#e53935','#fff'],
+      '64':  ['#1e88e5','#fff'],
+      '78':  ['#43a047','#fff'],
+      '112': ['#8e24aa','#fff'],
+      '129': ['#f57c00','#fff'],
+      '180': ['#00897b','#fff'],
+      '614': ['#c62828','#fff'],
+      '615': ['#6a1b9a','#fff'],
+      '712': ['#2e7d32','#fff'],
+      '744': ['#1565c0','#fff'],
+      '780': ['#558b2f','#fff'],
+    };
+    if (colors[line]) {
+      return 'background:' + colors[line][0] + ';color:' + colors[line][1];
+    }
+    // Dla pozostałych linii — kolor z hash numeru
+    let hash = 0;
+    for (let i = 0; i < line.length; i++) hash = line.charCodeAt(i) + ((hash << 5) - hash);
+    const hue = Math.abs(hash) % 360;
+    return 'background:hsl(' + hue + ',65%,42%);color:#fff';
+  }
+
+  async function load() {
     const btn = document.getElementById('rbtn');
     btn.classList.add('loading');
     document.getElementById('spinner').style.display = 'block';
@@ -204,7 +228,7 @@
             const diffStr = d.diffMin <= 0 ? 'już!' : d.diffMin + ' min';
             const diffCls = d.diffMin <= 2 ? 'dep-soon' : d.diffMin <= 5 ? 'dep-warn' : 'dep-ok';
             row.innerHTML = `
-              <div class="line-badge">${d.line}</div>
+              <div class="line-badge" style="${lineBadgeStyle(d.line)}">${d.line}</div>
               <div class="dep-direction">${d.headsign}</div>
               <div class="dep-time">
                 <div class="dep-plan">${d.planned}${d.delay > 0 ? ' <span class="dep-delay">+'+d.delay+"'</span>" : ''}</div>
