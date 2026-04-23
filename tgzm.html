@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Transport GZM">
+  <title>Transport GZM · Tarnowskie Góry</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f7f5f0; --surface: #ffffff;
+      --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.14);
+      --text: #1a1a18; --text2: #6b6b66; --text3: #a0a09a;
+      --accent: #b8860b; --red: #c0392b;
+      --tgzm: #f5c000; --tgzm-dark: #1a1a18;
+      --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+    header {
+      padding: 2.5rem 1.25rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem;
+      position: sticky; top: 0; background: var(--bg); z-index: 10;
+    }
+    .header-left h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+    .header-left p  { font-size: 12px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+    .btn {
+      background: var(--surface); border: 1px solid var(--border2); border-radius: 8px;
+      color: var(--text); font-family: var(--sans); font-size: 13px;
+      padding: 0.5rem 0.875rem; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .spin { display: inline-block; }
+    .loading .spin { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .container { padding: 0 1rem 2rem; max-width: 700px; margin: 0 auto; }
+    .stop-block { margin-top: 1.5rem; }
+    .stop-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.5rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+    }
+    .stop-name { font-size: 15px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--sans); text-decoration: none; }
+    .stop-name:hover { text-decoration: underline; }
+    .stop-meta { font-size: 11px; font-family: var(--mono); color: var(--text3); }
+    .dep-row {
+      background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+      padding: 0.65rem 0.875rem; margin-bottom: 6px;
+      display: grid; grid-template-columns: 52px 1fr auto; gap: 0 12px; align-items: center;
+    }
+    .line-badge {
+      background: var(--tgzm); color: var(--tgzm-dark);
+      font-family: var(--mono); font-size: 13px; font-weight: 500;
+      border-radius: 6px; padding: 0.2rem 0.4rem;
+      text-align: center; white-space: nowrap;
+    }
+    .dep-direction { font-size: 13px; font-weight: 500; }
+    .dep-minutes {
+      font-family: var(--mono); font-size: 15px; font-weight: 500;
+      color: var(--accent); text-align: right; white-space: nowrap;
+    }
+    .dep-minutes.soon { color: var(--red); }
+    .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 13px; font-family: var(--mono); }
+    .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
+    .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
+    #spinner { text-align: center; padding: 3rem 1rem; color: var(--text3); font-family: var(--mono); font-size: 13px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <h1>Transport GZM</h1>
+    <p>Tarnowskie Góry · rzeczywiste odjazdy</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0;">
+    <button class="btn" onclick="location.href='/'">← Powrót</button>
+    <button class="btn" id="rbtn" onclick="load()"><span class="spin">↻</span> Odśwież</button>
+  </div>
+</header>
+<div class="container">
+  <div id="spinner">Pobieram dane…</div>
+  <div id="content"></div>
+  <div class="updated" id="upd"></div>
+</div>
+<script>
+  const STOPS = [
+    { id: 2409, name: 'Powstańców Śląskich', note: 'stanowisko 1' },
+    { id: 2410, name: 'Powstańców Śląskich', note: 'stanowisko 2' },
+    { id: 8667, name: 'Mickiewicza',          note: 'stanowisko 1' },
+    { id: 3627, name: 'Mickiewicza',          note: 'stanowisko 2' },
+    { id: 3629, name: 'Sienkiewicza',         note: '' },
+  ];
+
+  async function load() {
+    const btn = document.getElementById('rbtn');
+    btn.classList.add('loading');
+    document.getElementById('spinner').style.display = 'block';
+    document.getElementById('content').innerHTML = '';
+    document.getElementById('upd').textContent = '';
+
+    try {
+      const results = await Promise.all(
+        STOPS.map(s => fetch('/api?action=sdip&stop=' + s.id).then(r => r.json()))
+      );
+
+      document.getElementById('spinner').style.display = 'none';
+      const content = document.getElementById('content');
+      let anyShown = false;
+
+      STOPS.forEach((stop, idx) => {
+        const data = results[idx];
+        const deps = data.departures || [];
+
+        const block = document.createElement('div');
+        block.className = 'stop-block';
+
+        const stopUrl = 'https://rj.transportgzm.pl/v2/rozklady/przystanek/' + stop.id + '/';
+        block.innerHTML = `
+          <div class="stop-header">
+            <a class="stop-name" href="${stopUrl}" target="_blank">Tarnowskie Góry ${stop.name}</a>
+            <div class="stop-meta">${stop.note}${data.updated ? ' · ' + data.updated : ''}</div>
+          </div>`;
+
+        if (!deps.length) {
+          block.innerHTML += `<div class="empty">Brak danych o odjazdach</div>`;
+        } else {
+          anyShown = true;
+          deps.forEach(d => {
+            const mins = parseInt(d.minutes) || 0;
+            const soon = mins <= 5;
+            const row = document.createElement('div');
+            row.className = 'dep-row';
+            row.innerHTML = `
+              <div class="line-badge">${d.line}</div>
+              <div class="dep-direction">${d.direction}</div>
+              <div class="dep-minutes${soon ? ' soon' : ''}">${d.minutes}</div>`;
+            block.appendChild(row);
+          });
+        }
+
+        content.appendChild(block);
+      });
+
+      document.getElementById('upd').textContent =
+        'ostatnia aktualizacja: ' + new Date().toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+    } catch(e) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('content').innerHTML = `<div class="err">Błąd: ${e.message}</div>`;
+    }
+
+    btn.classList.remove('loading');
+  }
+
+  load();
+  setInterval(load, 60000);
+</script>
+</body>
+</html>
