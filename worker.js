@@ -34,6 +34,41 @@ export default {
         });
       }
 
+      if (action === 'sdip') {
+        const stopId = url.searchParams.get('stop') || '';
+        if (!stopId) return json({ error: 'Brak stop' }, 400);
+        const res = await fetch('https://rj.transportgzm.pl/api/-/sdip/table/' + stopId + '/v2/');
+        if (!res.ok) throw new Error('SDIP HTTP ' + res.status);
+        const html = await res.text();
+        // Parsuj HTML - wyciągnij wiersze tabeli
+        const departures = [];
+        // Szukaj wierszy tr z danymi
+        const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let rowMatch;
+        while ((rowMatch = rowRegex.exec(html)) !== null) {
+          const row = rowMatch[1];
+          const cells = [];
+          const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+          let cellMatch;
+          while ((cellMatch = cellRegex.exec(row)) !== null) {
+            // Usuń tagi HTML z contentu
+            const text = cellMatch[1].replace(/<[^>]+>/g, '').trim();
+            if (text) cells.push(text);
+          }
+          if (cells.length >= 3) {
+            departures.push({
+              line:      cells[0],
+              direction: cells[1],
+              minutes:   cells[2]
+            });
+          }
+        }
+        // Wyciągnij czas aktualizacji
+        const updateMatch = html.match(/Aktualizacja danych:\s*([^<]+)/);
+        const updated = updateMatch ? updateMatch[1].trim() : '';
+        return json({ stopId, updated, departures });
+      }
+
       if (action === 'delays') {
         const ids   = url.searchParams.get('ids')   || '';
         const names = url.searchParams.get('names') || '';
