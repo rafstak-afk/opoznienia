@@ -93,6 +93,28 @@
     { id: 3629, name: 'Sienkiewicza',         note: '' },
   ];
 
+  function parseSDIP(html, stopId) {
+    const departures = [];
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let rowMatch;
+    while ((rowMatch = rowRegex.exec(html)) !== null) {
+      const row = rowMatch[1];
+      const cells = [];
+      let cellMatch;
+      const cr = new RegExp(cellRegex.source, 'gi');
+      while ((cellMatch = cr.exec(row)) !== null) {
+        const text = cellMatch[1].replace(/<[^>]+>/g, '').trim();
+        if (text) cells.push(text);
+      }
+      if (cells.length >= 3) {
+        departures.push({ line: cells[0], direction: cells[1], minutes: cells[2] });
+      }
+    }
+    const updateMatch = html.match(/Aktualizacja danych:\s*([^<]+)/);
+    return { stopId, updated: updateMatch ? updateMatch[1].trim() : '', departures };
+  }
+
   async function load() {
     const btn = document.getElementById('rbtn');
     btn.classList.add('loading');
@@ -102,7 +124,12 @@
 
     try {
       const results = await Promise.all(
-        STOPS.map(s => fetch('/api?action=sdip&stop=' + s.id).then(r => r.json()))
+        STOPS.map(s => 
+          fetch('http://rj.transportgzm.pl/api/-/sdip/table/' + s.id + '/v2/')
+            .then(r => r.text())
+            .then(html => parseSDIP(html, s.id))
+            .catch(e => ({ stopId: s.id, updated: '', departures: [], error: e.message }))
+        )
       );
 
       document.getElementById('spinner').style.display = 'none';
