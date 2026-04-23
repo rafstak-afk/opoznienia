@@ -20,6 +20,20 @@ export default {
     try {
       if (url.pathname !== '/api') return fetch(request);
 
+      if (action === 'limit') {
+        const res = await fetch(BASE + '/data-version', { headers: { 'X-API-Key': KEY } });
+        const hourly = res.headers.get('X-RateLimit-Hourly-Remaining') || '?';
+        const daily  = res.headers.get('X-RateLimit-Daily-Remaining')  || '?';
+        const hourlyLimit = res.headers.get('X-RateLimit-Hourly-Limit') || '?';
+        const dailyLimit  = res.headers.get('X-RateLimit-Daily-Limit')  || '?';
+        return json({
+          hourly_remaining: hourly,
+          hourly_limit: hourlyLimit,
+          daily_remaining: daily,
+          daily_limit: dailyLimit,
+        });
+      }
+
       if (action === 'delays') {
         const ids   = url.searchParams.get('ids')   || '';
         const names = url.searchParams.get('names') || '';
