@@ -37,7 +37,16 @@ export default {
       if (action === 'sdip') {
         const stopId = url.searchParams.get('stop') || '';
         if (!stopId) return json({ error: 'Brak stop' }, 400);
-        const res = await fetch('http://rj.transportgzm.pl/api/-/sdip/table/' + stopId + '/v2/');
+        const res = await fetch('https://rj.transportgzm.pl/api/-/sdip/table/' + stopId + '/v2/', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'pl-PL,pl;q=0.9',
+            'Referer': 'https://rj.transportgzm.pl/',
+            'HX-Request': 'true',
+            'HX-Target': 'sdip-time-table-' + stopId,
+          }
+        });
         if (!res.ok) throw new Error('SDIP HTTP ' + res.status);
         const html = await res.text();
         // Parsuj HTML - wyciągnij wiersze tabeli
