@@ -117,15 +117,8 @@
     try {
       const results = await Promise.all(
         STOPS.map(s => 
-          fetch('https://rj.transportgzm.pl/api/-/sdip/table/' + s.id + '/v2/', {
-            headers: {
-              'HX-Request': 'true',
-              'HX-Target': 'sdip-time-table-' + s.id,
-              'HX-Current-URL': 'https://rj.transportgzm.pl/v2/rozklady/przystanek/stop/' + s.id + '/',
-            }
-          })
-            .then(r => r.text())
-            .then(html => parseSDIP(html, s.id))
+          fetch('/api?action=sdip&stop=' + s.id)
+            .then(r => r.json())
             .catch(e => ({ stopId: s.id, updated: '', departures: [], error: e.message }))
         )
       );
