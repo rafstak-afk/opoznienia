@@ -37,7 +37,7 @@ export default {
       if (action === 'sdip') {
         const stopId = url.searchParams.get('stop') || '';
         if (!stopId) return json({ error: 'Brak stop' }, 400);
-        const res = await fetch('https://rj.transportgzm.pl/api/-/sdip/table/' + stopId + '/v2/');
+        const res = await fetch('http://rj.transportgzm.pl/api/-/sdip/table/' + stopId + '/v2/');
         if (!res.ok) throw new Error('SDIP HTTP ' + res.status);
         const html = await res.text();
         // Parsuj HTML - wyciągnij wiersze tabeli
