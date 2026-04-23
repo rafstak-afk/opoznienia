@@ -40,11 +40,14 @@ export default {
         const res = await fetch('https://rj.transportgzm.pl/api/-/sdip/table/' + stopId + '/v2/', {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'pl-PL,pl;q=0.9',
-            'Referer': 'https://rj.transportgzm.pl/',
             'HX-Request': 'true',
             'HX-Target': 'sdip-time-table-' + stopId,
+            'HX-Current-URL': 'https://rj.transportgzm.pl/v2/rozklady/przystanek/stop/' + stopId + '/',
+            'Referer': 'https://rj.transportgzm.pl/',
+          },
+          cf: {
+            tlsClientAuth: { enabled: false },
+            ssl: { rejectUnauthorized: false },
           }
         });
         if (!res.ok) throw new Error('SDIP HTTP ' + res.status);
