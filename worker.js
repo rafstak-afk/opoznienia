@@ -21,7 +21,7 @@ export default {
       if (url.pathname !== '/api') return fetch(request);
 
       if (action === 'limit') {
-        const res = await fetch(BASE + '/data-version', { headers: { 'X-API-Key': KEY } });
+        const res = await fetch(BASE + '/operations?stations=73312&pageSize=1&withPlanned=false', { headers: { 'X-API-Key': KEY } });
         const hourly = res.headers.get('X-RateLimit-Hourly-Remaining') || '?';
         const daily  = res.headers.get('X-RateLimit-Daily-Remaining')  || '?';
         const hourlyLimit = res.headers.get('X-RateLimit-Hourly-Limit') || '?';
