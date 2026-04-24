@@ -218,34 +218,31 @@
       const grid = document.createElement('div');
       grid.className = 'boards-grid';
       content.appendChild(grid);
-      STOPS.forEach(stop => {
-        const deps = (data.stops || {})[stop.id] || [];
+      GROUP_ORDER.forEach(groupId => {
+        const group = (data.groups || {})[groupId];
+        if (!group) return;
+        const deps = group.deps || [];
         const block = document.createElement('div');
         block.className = 'stop-block';
-
-        const stopUrl = 'https://rj.transportgzm.pl/v2/rozklady/przystanek/stop/' + stop.id + '/';
         block.innerHTML = `
           <div class="stop-header">
-            <a class="stop-name" href="${stopUrl}" target="_blank">${stop.name}</a>
-            <div class="stop-meta">${stop.note}</div>
+            <span class="stop-name">${group.name}</span>
+            <div class="stop-meta">rozkład</div>
           </div>`;
 
         if (!deps.length) {
           block.innerHTML += `<div class="empty-stop">🟢 Brak nadchodzących odjazdów</div>`;
         } else {
-          deps.slice(0, 8).forEach(d => {
+          deps.forEach(d => {
             const row = document.createElement('div');
             row.className = 'dep-row';
-            const delayHtml = d.delay > 0
-              ? `<div class="dep-delay">+${d.delay}'</div>`
-              : d.delay < 0 ? `<div class="dep-delay" style="color:var(--green)">${d.delay}'</div>` : '';
             const diffStr = d.diffMin <= 0 ? 'już!' : d.diffMin + ' min';
             const diffCls = d.diffMin <= 2 ? 'dep-soon' : d.diffMin <= 5 ? 'dep-warn' : 'dep-ok';
             row.innerHTML = `
               <div class="line-badge" style="${lineBadgeStyle(d.line)}">${d.line}</div>
               <div class="dep-direction">${d.headsign}</div>
               <div class="dep-time">
-                <div class="dep-plan">${d.planned}${d.delay > 0 ? ' <span class="dep-delay">+'+d.delay+"'</span>" : ''}</div>
+                <div class="dep-plan">${d.planned}</div>
                 <div class="${diffCls}">${diffStr}</div>
               </div>`;
             block.appendChild(row);
