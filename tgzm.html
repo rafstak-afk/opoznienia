@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Transport GZM">
-  <title>Transport GZM · Tarnowskie Góry</title>
+  <title>Rozkłady TGZM</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -121,8 +121,7 @@
 <body>
 <header>
   <div class="header-left">
-    <h1>Transport GZM</h1>
-    <p>Tarnowskie Góry · odjazdy real-time</p>
+    <h1>Rozkłady TGZM</h1>
   </div>
   <div style="display:flex;gap:8px;flex-shrink:0;">
     <button class="btn" onclick="location.href='/'">← Powrót</button>
@@ -131,7 +130,7 @@
 </header>
 <div class="container">
   <div class="search-box">
-    <input type="text" id="stopSearch" placeholder="Szukaj przystanku np. Bytom Dworzec…" autocomplete="off" oninput="searchStop(this.value)">
+    <input type="text" id="stopSearch" placeholder="Szukaj przystanku…" autocomplete="off" oninput="searchStop(this.value)">
     <div class="search-results" id="searchResults" style="display:none;"></div>
   </div>
   <div style="padding:0.5rem 0 0; font-size:12px; font-family:var(--mono); color:#555;">
@@ -143,11 +142,18 @@
 </div>
 <script>
   const STOPS = [
-    { id: 2409, name: 'Powstańców Śląskich', note: 'stanowisko 1' },
-    { id: 2410, name: 'Powstańców Śląskich', note: 'stanowisko 2' },
-    { id: 8667, name: 'Mickiewicza',          note: 'stanowisko 1' },
-    { id: 3627, name: 'Mickiewicza',          note: 'stanowisko 2' },
+    { id: 2409, name: 'Powstańców Śląskich', note: 'st. 1' },
+    { id: 2410, name: 'Powstańców Śląskich', note: 'st. 2' },
+    { id: 8667, name: 'Mickiewicza',          note: 'st. 1' },
+    { id: 3627, name: 'Mickiewicza',          note: 'st. 2' },
     { id: 3629, name: 'Sienkiewicza',         note: '' },
+    { id: 3569, name: 'Bytomska',             note: 'st. 1' },
+    { id: 3570, name: 'Bytomska',             note: 'st. 2' },
+    { id: 44,   name: 'Świerklaniec Park',    note: 'st. 1' },
+    { id: 8756, name: 'Świerklaniec Park',    note: 'st. 2' },
+    { id: 8755, name: 'Świerklaniec Park',    note: 'st. 3' },
+    { id: 45,   name: 'Świerklaniec Park',    note: 'st. 4' },
+    { id: 11081, name: 'Katowice Kopernika Dworzec', note: 'st. 1' },
   ];
 
   function fmtDiff(diff) {
