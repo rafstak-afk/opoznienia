@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Matejko">
+  <title>Matejko</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f7f5f0; --surface: #ffffff;
+      --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.14);
+      --text: #1a1a18; --text2: #6b6b66; --text3: #a0a09a;
+      --accent: #b8860b; --red: #c0392b; --green-border: #4caf50; --okbg:#e8f8e8;
+      --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+    header {
+      padding: 2.5rem 1.25rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem;
+      position: sticky; top: 0; background: var(--bg); z-index: 10;
+    }
+    .header-left h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+    .header-left p  { font-size: 12px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+    .refresh-btn {
+      background: var(--surface); border: 1px solid var(--border2); border-radius: 8px;
+      color: var(--text); font-family: var(--sans); font-size: 13px;
+      padding: 0.5rem 0.875rem; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .spin { display: inline-block; }
+    .loading .spin { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toggles-bar {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+      padding: 0.6rem 1.25rem; border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .container { padding: 0 1rem 2rem; max-width: 700px; margin: 0 auto; }
+    .hero, .station-block, .info-card {
+      background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+    }
+    .hero { padding: 1rem; margin-top: 1.5rem; }
+    .hero h2 { font-size: 20px; font-weight: 600; }
+    .hero p { margin-top: 0.4rem; font-size: 13px; color: var(--text2); font-family: var(--mono); }
+    .status-pill { display:inline-block; margin-top:0.75rem; padding:0.45rem 0.7rem; border-radius:999px; font-size:12px; font-family:var(--mono); }
+    .status-ok { background: var(--okbg); color:#246b2a; border:1px solid #4caf50; }
+    .status-warn { background: rgba(184,134,11,0.12); color:#8a6507; border:1px solid rgba(184,134,11,0.3); }
+    .status-bad { background: rgba(192,57,43,0.08); color:var(--red); border:1px solid rgba(192,57,43,0.2); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:1rem; }
+    .info-card { padding:0.9rem; }
+    .info-card .label { font-size:11px; color:var(--text3); font-family:var(--mono); text-transform:uppercase; }
+    .info-card .value { margin-top:0.35rem; font-size:18px; font-weight:600; }
+    .station-block { margin-top: 1rem; padding: 0.9rem; }
+    .row { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:0.65rem 0; border-top:1px solid var(--border); }
+    .row:first-child { border-top:0; padding-top:0; }
+    .row .k { font-size:11px; color:var(--text3); font-family:var(--mono); text-transform:uppercase; }
+    .row .v { font-size:13px; color:var(--text); text-align:right; }
+    .updated { font-size: 11px; font-family: var(--mono); color: var(--text3); text-align: center; margin-top: 1.5rem; }
+    .err   { background: rgba(192,57,43,0.06); border: 1px solid rgba(192,57,43,0.2); border-radius: 10px; padding: 1rem; font-size: 13px; color: var(--red); margin-top: 1.5rem; font-family: var(--mono); line-height: 1.6; }
+    @media (max-width: 560px) { .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <h1>Matejko</h1>
+    <p>monitoring jednego pociągu · IC 3814</p>
+  </div>
+</header>
+<div class="toggles-bar" style="justify-content:flex-end;">
+  <button class="refresh-btn" onclick="location.href='index.html'">← Opóźnienia</button>
+  <button class="refresh-btn" onclick="location.href='sledzone.html'">★ Śledzone</button>
+  <button class="refresh-btn" id="rbtn" onclick="load()"><span class="spin">↻</span> Odśwież</button>
+</div>
+<div class="container">
+  <div class="hero">
+    <h2 id="title">IC 3814 Matejko</h2>
+    <p id="subtitle">Ładowanie danych…</p>
+    <div id="status" class="status-pill status-warn">Sprawdzam status</div>
+  </div>
+  <div class="grid">
+    <div class="info-card"><div class="label">Opóźnienie</div><div class="value" id="delay">—</div></div>
+    <div class="info-card"><div class="label">Najbliższy czas</div><div class="value" id="nearestTime">—</div></div>
+  </div>
+  <div class="station-block">
+    <div class="row"><div class="k">Relacja</div><div class="v" id="relation">—</div></div>
+    <div class="row"><div class="k">Ostatnia stacja</div><div class="v" id="lastStation">—</div></div>
+    <div class="row"><div class="k">Następna stacja</div><div class="v" id="nextStation">—</div></div>
+    <div class="row"><div class="k">Przewoźnik</div><div class="v" id="carrier">—</div></div>
+    <div class="row"><div class="k">Stan</div><div class="v" id="message">—</div></div>
+  </div>
+  <div class="updated" id="upd"></div>
+  <div id="err"></div>
+</div>
+<script>
+  function fmtTime(val) {
+    if (!val) return '—';
+    try {
+      const d = new Date(val);
+      return isNaN(d) ? String(val).slice(0,16) : d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+    } catch { return String(val).slice(0,16); }
+  }
+  function setStatus(text, cls) {
+    const el = document.getElementById('status');
+    el.className = 'status-pill ' + cls;
+    el.textContent = text;
+  }
+  function describe(data) {
+    if (!data.found) return ['Nie znaleziono dzisiejszego kursu', 'status-warn'];
+    if (data.cancelled) return ['Pociąg odwołany', 'status-bad'];
+    const d = Number(data.delay || 0);
+    if (d <= 0) return ['Punktualnie', 'status-ok'];
+    if (d < 10) return ['Małe opóźnienie +' + d + ' min', 'status-warn'];
+    return ['Opóźnienie +' + d + ' min', 'status-bad'];
+  }
+  async function load() {
+    const btn = document.getElementById('rbtn');
+    btn.classList.add('loading');
+    document.getElementById('err').innerHTML = '';
+    try {
+      const res = await fetch('/api?action=train&number=3814&name=Matejko');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const desc = describe(data);
+      setStatus(desc[0], desc[1]);
+      document.getElementById('title').textContent = [data.catSymbol || 'IC', data.trainNumber || '3814', data.trainName || 'Matejko'].join(' ');
+      document.getElementById('subtitle').textContent = 'Dane real-time z serwisu';
+      document.getElementById('delay').textContent = data.cancelled ? 'ODWOŁANY' : ((Number(data.delay || 0) > 0 ? '+' + data.delay + ' min' : '0 min'));
+      document.getElementById('nearestTime').textContent = fmtTime(data.actualTime || data.plannedTime);
+      document.getElementById('relation').textContent = data.relation || '—';
+      document.getElementById('lastStation').textContent = data.lastStation ? data.lastStation.name + ' · ' + fmtTime(data.lastStation.actualTime || data.lastStation.plannedTime) : '—';
+      document.getElementById('nextStation').textContent = data.nextStation ? data.nextStation.name + ' · ' + fmtTime(data.nextStation.actualTime || data.nextStation.plannedTime) : '—';
+      document.getElementById('carrier').textContent = data.carrierCode || '—';
+      document.getElementById('message').textContent = data.message || desc[0];
+      document.getElementById('upd').textContent = 'ostatnia aktualizacja: ' + new Date().toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    } catch(e) {
+      document.getElementById('err').innerHTML = '<div class="err">Błąd: ' + e.message + '</div>';
+      setStatus('Błąd pobierania', 'status-bad');
+    }
+    btn.classList.remove('loading');
+  }
+  load();
+  setInterval(load, 180000);
+</script>
+</body>
+</html>
