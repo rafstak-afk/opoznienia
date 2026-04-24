@@ -116,13 +116,13 @@
     <h1>Opóźnienia pociągów</h1>
     <p>dane real-time · PLK API · <span id='limit-info'>limit: …</span></p>
   </div>
-  <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;">
-    <button class="refresh-btn" onclick="location.href='tgzm.html'">🚌 TGZM</button>
-    <button class="refresh-btn" onclick="location.href='sledzone.html'">★ Śledzone</button>
-    <button class="refresh-btn" onclick="location.href='moje.html'">★ Monitor</button>
-    <button class="refresh-btn" id="rbtn" onclick="load()"><span class="spin">↻</span> Odśwież</button>
-  </div>
 </header>
+<div class="toggles-bar" style="justify-content:flex-end;">
+  <button class="refresh-btn" onclick="location.href='tgzm.html'">🚌 TGZM</button>
+  <button class="refresh-btn" onclick="location.href='sledzone.html'">★ Śledzone</button>
+  <button class="refresh-btn" onclick="location.href='moje.html'">★ Monitor</button>
+  <button class="refresh-btn" id="rbtn" onclick="load()"><span class="spin">↻</span> Odśwież</button>
+</div>
 <div class="toggles-bar">
   <label class="toggle-wrap">
     <span id="toggle-label">Śledzone: wł</span>
