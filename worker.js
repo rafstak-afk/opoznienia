@@ -1,8 +1,12 @@
-const KEY  = 'A8rVZK-wu6MvMu8Chpn7y3ZRSGgu9o07DBgXSfolbsqJQIdc-DfUwzqLOOc1RUyBhCLafFuBFf1WSwwA8WMXTg';
+const KEY = (typeof PLK_API_KEY !== 'undefined' ? PLK_API_KEY : null);
 const BASE = 'https://pdp-api.plk-sa.pl/api/v1';
 
-async function plkGet(path) {
-  const res = await fetch(BASE + path, { headers: { 'X-API-Key': KEY } });
+function getKey(env) {
+  return (env && env.PLK_API_KEY) || KEY;
+}
+
+async function plkGet(path, env) {
+  const res = await fetch(BASE + path, { headers: { 'X-API-Key': getKey(env) } });
   if (!res.ok) throw new Error('PLK HTTP ' + res.status);
   return res.json();
 }
@@ -13,7 +17,7 @@ function json(data, status = 200) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url    = new URL(request.url);
     const action = url.searchParams.get('action') || '';
 
@@ -21,7 +25,7 @@ export default {
       if (url.pathname !== '/api') return fetch(request);
 
       if (action === 'limit') {
-        const res = await fetch(BASE + '/operations?stations=73312&pageSize=1&withPlanned=false', { headers: { 'X-API-Key': KEY } });
+        const res = await fetch(BASE + '/operations?stations=73312&pageSize=1&withPlanned=false', { headers: { 'X-API-Key': getKey(env) } });
         const hourly = res.headers.get('X-RateLimit-Hourly-Remaining') || '?';
         const daily  = res.headers.get('X-RateLimit-Daily-Remaining')  || '?';
         const hourlyLimit = res.headers.get('X-RateLimit-Hourly-Limit') || '?';
@@ -31,6 +35,76 @@ export default {
           hourly_limit: hourlyLimit,
           daily_remaining: daily,
           daily_limit: dailyLimit,
+        });
+      }
+
+
+      if (action === 'train') {
+        const number = (url.searchParams.get('number') || '3814').trim();
+        const wantedName = (url.searchParams.get('name') || 'Matejko').trim().toLowerCase();
+        const stationIds = (url.searchParams.get('stations') || '71001,72306,73106,73312,69708,71407,80416,75309,62653').trim();
+        const ops = await plkGet('/operations?stations=' + stationIds + '&withPlanned=true&fullRoutes=true&pageSize=500', env);
+        const list = Array.isArray(ops?.items) ? ops.items : Array.isArray(ops) ? ops : [];
+        const scored = list.map(item => {
+          const n = String(item.trainNumber || item.number || item.commercialNumber || '').trim();
+          const nm = String(item.trainName || item.name || '').trim().toLowerCase();
+          let score = 0;
+          if (n === number) score += 100;
+          if (number && n.includes(number)) score += 20;
+          if (wantedName && nm === wantedName) score += 40;
+          if (wantedName && (n + ' ' + nm).includes(wantedName)) score += 10;
+          return { item, score };
+        }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+
+        const match = scored[0] && scored[0].item;
+        if (!match) return json({
+          found: false,
+          trainNumber: number,
+          trainName: 'Matejko',
+          catSymbol: 'IC',
+          carrierCode: 'PKPIC',
+          delay: null,
+          cancelled: false,
+          relation: null,
+          lastStation: null,
+          nextStation: null,
+          plannedTime: null,
+          actualTime: null,
+          message: 'Nie znaleziono dzisiejszego kursu w danych API.'
+        });
+
+        const route = Array.isArray(match.route) ? match.route : Array.isArray(match.stops) ? match.stops : [];
+        const now = Date.now();
+        let lastStation = null;
+        let nextStation = null;
+        for (const stop of route) {
+          const planned = stop.plannedTime || stop.planTime || stop.arrivalPlannedTime || stop.departurePlannedTime || null;
+          const actual = stop.actualTime || stop.realTime || stop.arrivalActualTime || stop.departureActualTime || null;
+          const ref = actual || planned;
+          const ts = ref ? Date.parse(ref) : NaN;
+          if (!Number.isNaN(ts) && ts <= now) lastStation = stop;
+          if (!Number.isNaN(ts) && ts > now && !nextStation) nextStation = stop;
+        }
+        const first = route[0] || null;
+        const last = route[route.length - 1] || null;
+        const stationName = s => String(s?.stationName || s?.name || s?.commercialStopName || s?.stopName || '').trim();
+        const stopPlan = s => s ? (s.plannedTime || s.planTime || s.arrivalPlannedTime || s.departurePlannedTime || null) : null;
+        const stopAct  = s => s ? (s.actualTime || s.realTime || s.arrivalActualTime || s.departureActualTime || null) : null;
+
+        return json({
+          found: true,
+          trainNumber: String(match.trainNumber || match.number || match.commercialNumber || number),
+          trainName: String(match.trainName || match.name || 'Matejko'),
+          catSymbol: String(match.catSymbol || match.category || 'IC'),
+          carrierCode: String(match.carrierCode || match.carrier || ''),
+          delay: Number.isFinite(Number(match.delay)) ? Number(match.delay) : 0,
+          cancelled: Boolean(match.cancelled),
+          relation: first && last ? stationName(first) + ' → ' + stationName(last) : null,
+          lastStation: lastStation ? { name: stationName(lastStation), plannedTime: stopPlan(lastStation), actualTime: stopAct(lastStation) } : null,
+          nextStation: nextStation ? { name: stationName(nextStation), plannedTime: stopPlan(nextStation), actualTime: stopAct(nextStation) } : null,
+          plannedTime: stopPlan(nextStation || lastStation),
+          actualTime: stopAct(nextStation || lastStation),
+          message: Boolean(match.cancelled) ? 'Pociąg odwołany.' : 'Kurs znaleziony w bieżących danych.'
         });
       }
 
@@ -235,8 +309,8 @@ export default {
         const trackedNums   = trackedParam ? trackedParam.split(',').map(s => s.trim()) : [];
 
         const [opsData, schedData] = await Promise.all([
-          plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500'),
-          plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500')
+          plkGet('/operations?stations=' + ids + '&withPlanned=true&fullRoutes=true&pageSize=500', env),
+          plkGet('/schedules?stations=' + ids + '&dateFrom=' + today + '&dateTo=' + today + '&pageSize=500', env)
         ]);
 
         const trains       = opsData.trains   || [];
