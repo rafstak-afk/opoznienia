@@ -164,7 +164,7 @@
     const matches = ALL_STOPS.filter(s => s.name.toLowerCase().includes(q.toLowerCase())).slice(0, 10);
     if (!matches.length) { results.style.display = 'none'; return; }
     results.innerHTML = matches.map(s => {
-      const groupUrl = 'https://rj.transportgzm.pl/api/-/sdip/table/' + s.first_id + '/v2/';
+      const groupUrl = 'https://sdip.transportgzm.pl/main';
       const stopsHtml = s.stops.map(st =>
         '<a href="https://rj.transportgzm.pl/api/-/sdip/table/' + st.id + '/v2/" target="_blank" class="st-link" onclick="event.stopPropagation()">st. ' + st.st + '</a>'
       ).join('');
