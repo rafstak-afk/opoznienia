@@ -141,19 +141,9 @@
   <div class="updated" id="upd"></div>
 </div>
 <script>
-  const STOPS = [
-    { id: 2409,  name: 'TG Powstańców Śląskich',    note: 'st. 1' },
-    { id: 2410,  name: 'TG Powstańców Śląskich',    note: 'st. 2' },
-    { id: 3629,  name: 'TG Sienkiewicza',           note: '' },
-    { id: 8667,  name: 'TG Mickiewicza',            note: 'st. 1' },
-    { id: 3627,  name: 'TG Mickiewicza',            note: 'st. 2' },
-    { id: 3569,  name: 'TG Bytomska',               note: 'st. 1' },
-    { id: 3570,  name: 'TG Bytomska',               note: 'st. 2' },
-    { id: 44,    name: 'Świerklaniec Park',          note: 'st. 1' },
-    { id: 8756,  name: 'Świerklaniec Park',          note: 'st. 2' },
-    { id: 8755,  name: 'Świerklaniec Park',          note: 'st. 3' },
-    { id: 45,    name: 'Świerklaniec Park',          note: 'st. 4' },
-    { id: 11081, name: 'Katowice Kopernika Dworzec', note: 'st. 1' },
+  const GROUP_ORDER = [
+    'TG_POWSTANCOW', 'TG_SIENKIEWICZA', 'TG_BYTOMSKA',
+    'TG_DWORZEC', 'SWIERKLANIEC_PARK', 'KT_KOPERNIKA'
   ];
 
   function fmtDiff(diff) {
