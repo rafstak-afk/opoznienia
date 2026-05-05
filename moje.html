@@ -135,18 +135,12 @@
     if (!plannedTime) return true;
     try {
       const todayWarsaw = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
-      if (actualTime && actualTime.includes('T')) {
-        const actualDate = actualTime.slice(0, 10);
-        if (actualDate < todayWarsaw) return false;
+      const dateStr = (actualTime || plannedTime);
+      if (dateStr && dateStr.includes('T')) {
+        const recDate = dateStr.slice(0, 10);
+        if (recDate < todayWarsaw) return false;
       }
-      const timeStr = plannedTime.includes('T') ? plannedTime.slice(11, 16) : plannedTime.slice(0, 5);
-      const [h, m] = timeStr.split(':').map(Number);
-      const plannedMin = h * 60 + m;
-      const actualMin  = plannedMin + (delay || 0);
-      const nowStr = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour12: false });
-      const [nh, nm] = nowStr.slice(0, 5).split(':').map(Number);
-      const nowMin = nh * 60 + nm;
-      return nowMin < actualMin + 60;
+      return true;
     } catch { return true; }
   }
 
