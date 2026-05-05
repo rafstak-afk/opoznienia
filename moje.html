@@ -146,7 +146,7 @@
       const nowStr = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour12: false });
       const [nh, nm] = nowStr.slice(0, 5).split(':').map(Number);
       const nowMin = nh * 60 + nm;
-      return nowMin < actualMin + 10;
+      return nowMin < actualMin + 60;
     } catch { return true; }
   }
 
